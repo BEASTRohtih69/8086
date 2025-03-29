@@ -287,6 +287,7 @@ class Assembler:
                 self.labels[label] = self.current_address
                 self.labels[label.lower()] = self.current_address
                 self.labels[label.upper()] = self.current_address
+                print(f"DEBUG - Label {label} defined at address {self.current_address:04X}")
                 line = rest.strip()
                 if not line:
                     continue
@@ -750,6 +751,40 @@ class Assembler:
             machine_code.append(0xF4)
         elif mnemonic == 'RET':
             machine_code.append(0xC3)
+        elif mnemonic == 'PUSH':
+            if len(operands) != 1:
+                raise ValueError(f"PUSH requires 1 operand, got {len(operands)}")
+            
+            reg = operands[0]
+            reg_type = self._get_operand_type(reg)
+            
+            if reg_type == 'register':
+                reg_num, reg_size = self.registers[reg.upper()]
+                
+                if reg_size == 16:  # Only 16-bit registers can be pushed
+                    opcode = 0x50 + reg_num
+                    machine_code.append(opcode)
+                else:
+                    raise ValueError(f"Cannot PUSH 8-bit register {reg}")
+            else:
+                raise ValueError(f"Unsupported PUSH operand type: {reg_type}")
+        elif mnemonic == 'POP':
+            if len(operands) != 1:
+                raise ValueError(f"POP requires 1 operand, got {len(operands)}")
+            
+            reg = operands[0]
+            reg_type = self._get_operand_type(reg)
+            
+            if reg_type == 'register':
+                reg_num, reg_size = self.registers[reg.upper()]
+                
+                if reg_size == 16:  # Only 16-bit registers can be popped
+                    opcode = 0x58 + reg_num
+                    machine_code.append(opcode)
+                else:
+                    raise ValueError(f"Cannot POP 8-bit register {reg}")
+            else:
+                raise ValueError(f"Unsupported POP operand type: {reg_type}")
         elif mnemonic == 'MOV':
             if len(operands) != 2:
                 raise ValueError(f"MOV requires 2 operands, got {len(operands)}")
@@ -830,6 +865,118 @@ class Assembler:
                 # ModR/M byte: mod=11 (register to register), reg=dest, r/m=src
                 modrm = 0xC0 | (dest_num << 3) | src_num
                 machine_code.append(modrm)
+                
+        elif mnemonic == 'SUB':
+            if len(operands) != 2:
+                raise ValueError(f"SUB requires 2 operands, got {len(operands)}")
+            
+            dest, src = operands
+            
+            # Determine operand types
+            dest_type = self._get_operand_type(dest)
+            src_type = self._get_operand_type(src)
+            
+            # Handle SUB AL, imm8 and SUB AX, imm16 special cases
+            if dest.upper() == 'AL' and src_type == 'immediate':
+                machine_code.append(0x2C)  # SUB AL, imm8
+                machine_code.append(self._parse_value(src) & 0xFF)
+            elif dest.upper() == 'AX' and src_type == 'immediate':
+                machine_code.append(0x2D)  # SUB AX, imm16
+                value = self._parse_value(src)
+                machine_code.append(value & 0xFF)
+                machine_code.append((value >> 8) & 0xFF)
+            elif dest_type == 'register' and src_type == 'immediate':
+                # SUB r/m16, imm16
+                reg_num, reg_size = self.registers[dest.upper()]
+                if reg_size == 16:
+                    # SUB r16, imm16
+                    machine_code.append(0x81)  # SUB r/m16, imm16
+                    modrm = 0xE8 | reg_num  # 0xE8 = 11101000 (mod=11, reg=101 for SUB, r/m=reg)
+                    machine_code.append(modrm)
+                    
+                    value = self._parse_value(src)
+                    machine_code.append(value & 0xFF)
+                    machine_code.append((value >> 8) & 0xFF)
+                else:
+                    # SUB r8, imm8
+                    machine_code.append(0x80)  # SUB r/m8, imm8
+                    modrm = 0xE8 | reg_num  # 0xE8 = 11101000 (mod=11, reg=101 for SUB, r/m=reg)
+                    machine_code.append(modrm)
+                    
+                    machine_code.append(self._parse_value(src) & 0xFF)
+            elif dest_type == 'register' and src_type == 'register':
+                dest_num, dest_size = self.registers[dest.upper()]
+                src_num, src_size = self.registers[src.upper()]
+                
+                if dest_size != src_size:
+                    raise ValueError(f"Register size mismatch: {dest} ({dest_size}) and {src} ({src_size})")
+                
+                if dest_size == 8:
+                    # SUB r8, r8
+                    machine_code.append(0x2A)  # SUB r8, r/m8
+                else:
+                    # SUB r16, r16
+                    machine_code.append(0x2B)  # SUB r16, r/m16
+                
+                # ModR/M byte: mod=11 (register to register), reg=dest, r/m=src
+                modrm = 0xC0 | (dest_num << 3) | src_num
+                machine_code.append(modrm)
+                
+        elif mnemonic == 'CMP':
+            if len(operands) != 2:
+                raise ValueError(f"CMP requires 2 operands, got {len(operands)}")
+            
+            dest, src = operands
+            
+            # Determine operand types
+            dest_type = self._get_operand_type(dest)
+            src_type = self._get_operand_type(src)
+            
+            # Handle CMP AL, imm8 and CMP AX, imm16 special cases
+            if dest.upper() == 'AL' and src_type == 'immediate':
+                machine_code.append(0x3C)  # CMP AL, imm8
+                machine_code.append(self._parse_value(src) & 0xFF)
+            elif dest.upper() == 'AX' and src_type == 'immediate':
+                machine_code.append(0x3D)  # CMP AX, imm16
+                value = self._parse_value(src)
+                machine_code.append(value & 0xFF)
+                machine_code.append((value >> 8) & 0xFF)
+            elif dest_type == 'register' and src_type == 'immediate':
+                # CMP r/m16, imm16
+                reg_num, reg_size = self.registers[dest.upper()]
+                if reg_size == 16:
+                    # CMP r16, imm16
+                    machine_code.append(0x81)  # CMP r/m16, imm16
+                    modrm = 0xF8 | reg_num  # 0xF8 = 11111000 (mod=11, reg=111 for CMP, r/m=reg)
+                    machine_code.append(modrm)
+                    
+                    value = self._parse_value(src)
+                    machine_code.append(value & 0xFF)
+                    machine_code.append((value >> 8) & 0xFF)
+                else:
+                    # CMP r8, imm8
+                    machine_code.append(0x80)  # CMP r/m8, imm8
+                    modrm = 0xF8 | reg_num  # 0xF8 = 11111000 (mod=11, reg=111 for CMP, r/m=reg)
+                    machine_code.append(modrm)
+                    
+                    machine_code.append(self._parse_value(src) & 0xFF)
+            elif dest_type == 'register' and src_type == 'register':
+                dest_num, dest_size = self.registers[dest.upper()]
+                src_num, src_size = self.registers[src.upper()]
+                
+                if dest_size != src_size:
+                    raise ValueError(f"Register size mismatch: {dest} ({dest_size}) and {src} ({src_size})")
+                
+                if dest_size == 8:
+                    # CMP r8, r8
+                    machine_code.append(0x3A)  # CMP r8, r/m8
+                else:
+                    # CMP r16, r16
+                    machine_code.append(0x3B)  # CMP r16, r/m16
+                
+                # ModR/M byte: mod=11 (register to register), reg=dest, r/m=src
+                modrm = 0xC0 | (dest_num << 3) | src_num
+                machine_code.append(modrm)
         
         elif mnemonic == 'INT':
             if len(operands) != 1:
@@ -839,14 +986,63 @@ class Assembler:
             machine_code.append(0xCD)  # INT opcode
             machine_code.append(interrupt_num & 0xFF)
         
-        elif mnemonic.startswith('J'):  # Jump instructions
+        elif mnemonic.startswith('J') or mnemonic.startswith('LOOP'):  # Jump and loop instructions
             if len(operands) != 1:
                 raise ValueError(f"{mnemonic} requires 1 operand, got {len(operands)}")
             
             target = operands[0]
             
-            # Look up opcode for this jump type
-            if mnemonic in self.opcodes and 'rel8' in self.opcodes[mnemonic]:
+            # Look up opcode for this instruction type
+            if mnemonic.startswith('LOOP'):
+                if mnemonic == 'LOOP':
+                    opcode = 0xE2
+                elif mnemonic == 'LOOPE' or mnemonic == 'LOOPZ':
+                    opcode = 0xE1
+                elif mnemonic == 'LOOPNE' or mnemonic == 'LOOPNZ':
+                    opcode = 0xE0
+                else:
+                    raise ValueError(f"Unknown LOOP instruction: {mnemonic}")
+                    
+                machine_code.append(opcode)
+                
+                # Calculate relative offset for LOOP
+                if target in self.labels:
+                    target_address = self.labels[target]
+                    # The loop offset is relative to the next instruction
+                    # which is 2 bytes after the current address (opcode + offset)
+                    offset = target_address - (self.current_address + 2)
+                    if not -128 <= offset <= 127:
+                        raise ValueError(f"Loop target out of range for short jump: {offset}")
+                    machine_code.append(offset & 0xFF)
+                    print(f"DEBUG - LOOP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
+                    
+                    # Debugging all labels
+                    print(f"DEBUG - All labels: {self.labels}")
+                else:
+                    # Try different cases of the label
+                    target_lower = target.lower()
+                    target_upper = target.upper()
+                    
+                    if target_lower in self.labels:
+                        target_address = self.labels[target_lower]
+                        offset = target_address - (self.current_address + 2)
+                        if not -128 <= offset <= 127:
+                            raise ValueError(f"Loop target out of range for short jump: {offset}")
+                        machine_code.append(offset & 0xFF)
+                        print(f"DEBUG - LOOP {mnemonic} to {target_lower} (lowercase): from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
+                    elif target_upper in self.labels:
+                        target_address = self.labels[target_upper]
+                        offset = target_address - (self.current_address + 2)
+                        if not -128 <= offset <= 127:
+                            raise ValueError(f"Loop target out of range for short jump: {offset}")
+                        machine_code.append(offset & 0xFF)
+                        print(f"DEBUG - LOOP {mnemonic} to {target_upper} (uppercase): from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
+                    else:
+                        print(f"DEBUG - Label {target} not found. Available labels: {list(self.labels.keys())}")
+                        raise ValueError(f"Unknown label: {target}")
+                
+            # For jumps (J*)
+            elif mnemonic in self.opcodes and 'rel8' in self.opcodes[mnemonic]:
                 opcode = self.opcodes[mnemonic]['rel8']
                 machine_code.append(opcode)
                 
@@ -859,6 +1055,7 @@ class Assembler:
                     if not -128 <= offset <= 127:
                         raise ValueError(f"Jump target out of range for short jump: {offset}")
                     machine_code.append(offset & 0xFF)
+                    print(f"DEBUG - JUMP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
                 else:
                     raise ValueError(f"Unknown label: {target}")
         
@@ -902,6 +1099,29 @@ class Assembler:
                         raise ValueError(f"DEC not supported for register {reg}")
                 else:
                     raise ValueError(f"DEC for 8-bit registers not implemented yet")
+            else:
+                raise ValueError(f"Unknown register: {reg}")
+                
+        elif mnemonic == 'INC':
+            if len(operands) != 1:
+                raise ValueError(f"INC requires 1 operand, got {len(operands)}")
+            
+            reg = operands[0].upper()
+            
+            # INC register (16-bit)
+            if reg in self.registers:
+                reg_num, reg_size = self.registers[reg]
+                
+                if reg_size == 16:
+                    # Check that it's one of the main registers (AX, CX, DX, BX, SP, BP, SI, DI)
+                    if reg in ['AX', 'CX', 'DX', 'BX', 'SP', 'BP', 'SI', 'DI']:
+                        # INC r16 - opcode is 0x40 + register number
+                        opcode = 0x40 + reg_num
+                        machine_code.append(opcode)
+                    else:
+                        raise ValueError(f"INC not supported for register {reg}")
+                else:
+                    raise ValueError(f"INC for 8-bit registers not implemented yet")
             else:
                 raise ValueError(f"Unknown register: {reg}")
         

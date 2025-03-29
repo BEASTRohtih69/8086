@@ -167,6 +167,7 @@ class CPU:
         phys_addr = self.get_physical_address(self.get_register(self.CS), self.get_register(self.IP))
         before_ip = self.get_register(self.IP)
         before_cx = self.get_register(self.CX)
+        before_ax = self.get_register(self.AX)
         before_zf = self.get_flag(self.ZERO_FLAG)
         
         # Fetch the opcode
@@ -182,10 +183,11 @@ class CPU:
         instruction_info = self.instruction_set.decode(opcode)
         mnemonic, handler = instruction_info
         
-        # Debug output for important instructions (DEC CX, JNZ/JNE)
-        debug_opcodes = [0x49, 0x75]  # DEC CX (0x49), JNZ/JNE (0x75)
-        if opcode in debug_opcodes:
-            print(f"Executing {mnemonic} at {phys_addr:#06x}, IP={before_ip:#04x}, CX={before_cx:#04x}, ZF={before_zf}")
+        # Debug output for important instructions (DEC CX, JNZ/JNE, LOOP)
+        debug_opcodes = [0x49, 0x75, 0xE2]  # DEC CX (0x49), JNZ/JNE (0x75), LOOP (0xE2)
+        
+        # Debug all instructions during troubleshooting
+        print(f"Executing {mnemonic} at {phys_addr:#06x}, IP={before_ip:#04x}, CX={before_cx:#04x}, AX={before_ax:#04x}, ZF={before_zf}")
         
         if handler:
             # If the instruction takes a ModR/M byte, fetch it
@@ -195,12 +197,16 @@ class CPU:
             else:
                 handler()
                 
-            # Debug output after execution for important instructions
-            if opcode in debug_opcodes:
-                after_ip = self.get_register(self.IP)
-                after_cx = self.get_register(self.CX)
-                after_zf = self.get_flag(self.ZERO_FLAG)
-                print(f"After {mnemonic}: IP={after_ip:#04x}, CX={after_cx:#04x}, ZF={after_zf}")
+            # Debug output after execution
+            after_ip = self.get_register(self.IP)
+            after_cx = self.get_register(self.CX)
+            after_ax = self.get_register(self.AX)
+            after_zf = self.get_flag(self.ZERO_FLAG)
+            print(f"After {mnemonic}: IP={after_ip:#04x}, CX={after_cx:#04x}, AX={after_ax:#04x}, ZF={after_zf}")
+            
+            # Special debug for LOOP instruction
+            if opcode == 0xE2:  # LOOP
+                print(f"Special LOOP debug: IP change from {before_ip:#04x} to {after_ip:#04x}, CX={before_cx:#04x} -> {after_cx:#04x}")
                 
             self.instruction_count += 1
             return True

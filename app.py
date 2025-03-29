@@ -65,7 +65,9 @@ def index():
     sample_programs = [
         {"name": "Hello World", "path": "sample_programs/hello.asm"},
         {"name": "Simple Test", "path": "sample_programs/test_simple.asm"},
-        {"name": "Loop Test", "path": "sample_programs/loop_test.asm"},
+        {"name": "Loop Test (DEC+JNZ)", "path": "sample_programs/loop_test.asm"},
+        {"name": "Loop Test (LOOP)", "path": "sample_programs/loop_instruction_test.asm"},
+        {"name": "8086 Instruction Test", "path": "sample_programs/instruction_test.asm"},
         {"name": "Performance Test", "path": "sample_programs/performance_test.asm"}
     ]
     
