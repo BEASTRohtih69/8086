@@ -54,6 +54,13 @@
         <header class="mb-4">
             <h1 class="text-center">8086 Microprocessor Simulator</h1>
             <p class="text-center lead">A comprehensive simulator for the 8086 instruction set</p>
+            <div class="text-center mb-3">
+                <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary me-2">Simulator</a>
+                <a href="{{ url_for('memory_heatmap') }}" class="btn btn-sm btn-info me-2">Memory Heatmap</a>
+                {% if 'profiler_results' in session %}
+                <a href="{{ url_for('profiler_results') }}" class="btn btn-sm btn-success">Profiler Results</a>
+                {% endif %}
+            </div>
         </header>
         
         <!-- Flash Messages -->

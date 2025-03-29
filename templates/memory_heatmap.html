@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8086 Simulator - Memory Heatmap</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <style>
+        .memory-cell {
+            width: 20px;
+            height: 20px;
+            margin: 1px;
+            display: inline-block;
+            text-align: center;
+            font-size: 10px;
+            line-height: 20px;
+            cursor: pointer;
+            border: 1px solid var(--bs-border-color);
+            position: relative;
+        }
+        
+        .memory-grid {
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        
+        .memory-row {
+            margin-bottom: 1px;
+        }
+        
+        .row-label {
+            display: inline-block;
+            width: 70px;
+            font-family: monospace;
+            text-align: right;
+            padding-right: 10px;
+        }
+        
+        .tooltip-custom {
+            position: absolute;
+            background-color: var(--bs-gray-800);
+            color: var(--bs-light);
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+            pointer-events: none;
+            white-space: nowrap;
+            min-width: 150px;
+        }
+        
+        .segment-divider {
+            margin: 15px 0;
+            border-top: 1px solid var(--bs-info);
+            position: relative;
+        }
+        
+        .segment-label {
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            background-color: var(--bs-body-bg);
+            padding: 0 10px;
+            font-weight: bold;
+            color: var(--bs-info);
+        }
+        
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+        
+        .legend-item {
+            width: 20px;
+            height: 20px;
+            margin: 0 2px;
+        }
+        
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        
+        .heat-0 { background-color: var(--bs-gray-900); }
+        .heat-1 { background-color: #1a2e83; }
+        .heat-2 { background-color: #2e439f; }
+        .heat-3 { background-color: #3e5ec7; }
+        .heat-4 { background-color: #4d71de; }
+        .heat-5 { background-color: #5983f5; }
+        .heat-6 { background-color: #699cff; }
+        .heat-7 { background-color: #79b5ff; }
+        .heat-8 { background-color: #88cdff; }
+        .heat-9 { background-color: #98e6ff; }
+        .heat-10 { background-color: #a7ffff; }
+        
+        .segment-CODE { border-left: 3px solid var(--bs-primary); }
+        .segment-DATA { border-left: 3px solid var(--bs-success); }
+        .segment-STACK { border-left: 3px solid var(--bs-warning); }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <header class="mb-4">
+            <h1 class="text-center">Memory Access Heatmap</h1>
+            <p class="text-center lead">Visual representation of memory access patterns in the 8086 simulator</p>
+            <div class="text-center mb-3">
+                <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary me-2">Simulator</a>
+                <a href="{{ url_for('memory_heatmap') }}" class="btn btn-sm btn-info me-2">Memory Heatmap</a>
+                {% if profiler_active %}
+                <a href="{{ url_for('profiler_results') }}" class="btn btn-sm btn-success">Profiler Results</a>
+                {% endif %}
+            </div>
+        </header>
+        
+        <div class="row">
+            <div class="col-md-10 offset-md-1">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">Memory Heatmap</h4>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary refresh-btn">Refresh Data</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% if not profiler_active %}
+                        <div class="alert alert-info">
+                            <p>To see memory access patterns, enable profiling when running a program first.</p>
+                            <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">Go to Simulator</a>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="memory-heatmap-info mb-3">
+                            <h5>Memory Access Statistics</h5>
+                            <p>Showing memory access patterns from the latest profiled execution.</p>
+                            <div class="memory-stats"></div>
+                        </div>
+                        
+                        <div class="heatmap-legend">
+                            <span class="me-2">Access Intensity:</span>
+                            <div class="d-flex flex-grow-1">
+                                <div class="legend-item heat-0"></div>
+                                <div class="legend-item heat-1"></div>
+                                <div class="legend-item heat-2"></div>
+                                <div class="legend-item heat-3"></div>
+                                <div class="legend-item heat-4"></div>
+                                <div class="legend-item heat-5"></div>
+                                <div class="legend-item heat-6"></div>
+                                <div class="legend-item heat-7"></div>
+                                <div class="legend-item heat-8"></div>
+                                <div class="legend-item heat-9"></div>
+                                <div class="legend-item heat-10"></div>
+                            </div>
+                            <div class="legend-labels">
+                                <span>None</span>
+                                <span>Low</span>
+                                <span>Medium</span>
+                                <span>High</span>
+                            </div>
+                        </div>
+                        
+                        <div class="segment-divider">
+                            <span class="segment-label">CODE (0x0100-0x01FF)</span>
+                        </div>
+                        <div class="memory-grid" id="code-segment"></div>
+                        
+                        <div class="segment-divider">
+                            <span class="segment-label">DATA (0x0200-0x02FF)</span>
+                        </div>
+                        <div class="memory-grid" id="data-segment"></div>
+                        
+                        <div class="segment-divider">
+                            <span class="segment-label">STACK (0x0300-0x03FF)</span>
+                        </div>
+                        <div class="memory-grid" id="stack-segment"></div>
+                    </div>
+                </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4 class="mb-0">Memory Access Details</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="memory-details">
+                            <p>Click on a memory cell to see detailed access information.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tooltip for memory cells -->
+    <div class="tooltip-custom"></div>
+    
+    <!-- Bootstrap and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tooltip = document.querySelector('.tooltip-custom');
+            let memoryData = {};
+            
+            // Function to fetch memory access data
+            function fetchMemoryData() {
+                fetch('/api/memory_access')
+                    .then(response => response.json())
+                    .then(data => {
+                        memoryData = data;
+                        renderHeatmap();
+                        updateStats();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching memory access data:', error);
+                    });
+            }
+            
+            // Function to render the heatmap
+            function renderHeatmap() {
+                const segments = {
+                    'CODE': { element: document.getElementById('code-segment'), start: 0x100, end: 0x1FF },
+                    'DATA': { element: document.getElementById('data-segment'), start: 0x200, end: 0x2FF },
+                    'STACK': { element: document.getElementById('stack-segment'), start: 0x300, end: 0x3FF }
+                };
+                
+                // Clear existing content
+                for (const segment in segments) {
+                    segments[segment].element.innerHTML = '';
+                }
+                
+                // Render memory cells for each segment
+                for (const segment in segments) {
+                    const { element, start, end } = segments[segment];
+                    
+                    for (let rowStart = start; rowStart < end; rowStart += 16) {
+                        const rowElement = document.createElement('div');
+                        rowElement.className = 'memory-row';
+                        
+                        // Add row label (address)
+                        const rowLabel = document.createElement('span');
+                        rowLabel.className = 'row-label';
+                        rowLabel.textContent = `0x${rowStart.toString(16).toUpperCase().padStart(4, '0')}:`;
+                        rowElement.appendChild(rowLabel);
+                        
+                        // Add cells for this row
+                        for (let i = 0; i < 16; i++) {
+                            const address = rowStart + i;
+                            const cell = document.createElement('div');
+                            cell.className = 'memory-cell segment-' + segment;
+                            cell.dataset.address = address;
+                            
+                            if (memoryData.memory_access && memoryData.memory_access[address]) {
+                                const access = memoryData.memory_access[address];
+                                const intensity = Math.min(10, Math.floor(access.intensity * 10));
+                                cell.classList.add(`heat-${intensity}`);
+                                
+                                // Add hover tooltip data
+                                cell.addEventListener('mouseover', function(e) {
+                                    tooltip.innerHTML = `
+                                        <strong>Address:</strong> 0x${address.toString(16).toUpperCase().padStart(4, '0')}<br>
+                                        <strong>Reads:</strong> ${access.reads}<br>
+                                        <strong>Writes:</strong> ${access.writes}<br>
+                                        <strong>Total:</strong> ${access.total}
+                                    `;
+                                    tooltip.style.display = 'block';
+                                    tooltip.style.left = `${e.pageX + 10}px`;
+                                    tooltip.style.top = `${e.pageY + 10}px`;
+                                });
+                                
+                                cell.addEventListener('mouseout', function() {
+                                    tooltip.style.display = 'none';
+                                });
+                                
+                                // Add click event to show details
+                                cell.addEventListener('click', function() {
+                                    showMemoryDetails(address, access);
+                                });
+                            } else {
+                                cell.classList.add('heat-0');
+                            }
+                            
+                            rowElement.appendChild(cell);
+                        }
+                        
+                        element.appendChild(rowElement);
+                    }
+                }
+            }
+            
+            // Function to update stats
+            function updateStats() {
+                const statsElement = document.querySelector('.memory-stats');
+                
+                if (!memoryData.memory_access) {
+                    statsElement.innerHTML = '<p>No memory access data available. Run a program with profiling enabled.</p>';
+                    return;
+                }
+                
+                let totalReads = 0;
+                let totalWrites = 0;
+                let accessedAddresses = 0;
+                
+                const segmentAccess = {
+                    'CODE': { reads: 0, writes: 0 },
+                    'DATA': { reads: 0, writes: 0 },
+                    'STACK': { reads: 0, writes: 0 }
+                };
+                
+                for (const addr in memoryData.memory_access) {
+                    const access = memoryData.memory_access[addr];
+                    totalReads += access.reads;
+                    totalWrites += access.writes;
+                    
+                    if (access.reads > 0 || access.writes > 0) {
+                        accessedAddresses++;
+                        segmentAccess[access.segment].reads += access.reads;
+                        segmentAccess[access.segment].writes += access.writes;
+                    }
+                }
+                
+                let html = `
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <div class="card bg-dark">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Total Memory Access</h6>
+                                    <p class="card-text mb-0">Reads: ${totalReads}</p>
+                                    <p class="card-text mb-0">Writes: ${totalWrites}</p>
+                                    <p class="card-text mb-0">Total: ${totalReads + totalWrites}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <div class="card bg-dark">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Accessed Addresses</h6>
+                                    <p class="card-text mb-0">Unique addresses: ${accessedAddresses}</p>
+                                    <p class="card-text mb-0">Coverage: ${((accessedAddresses / 768) * 100).toFixed(2)}%</p>
+                                    <p class="card-text mb-0">Max access count: ${memoryData.max_access}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <div class="card bg-dark">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Segment Activity</h6>
+                `;
+                
+                for (const segment in segmentAccess) {
+                    const access = segmentAccess[segment];
+                    const total = access.reads + access.writes;
+                    html += `<p class="card-text mb-0">${segment}: ${total} (${access.reads}R/${access.writes}W)</p>`;
+                }
+                
+                html += `
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                statsElement.innerHTML = html;
+            }
+            
+            // Function to show memory details
+            function showMemoryDetails(address, access) {
+                const detailsElement = document.getElementById('memory-details');
+                
+                const hexAddress = `0x${address.toString(16).toUpperCase().padStart(4, '0')}`;
+                
+                let html = `
+                    <h5>Memory Address: ${hexAddress}</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th>Segment</th>
+                                    <td>${access.segment}</td>
+                                </tr>
+                                <tr>
+                                    <th>Read Operations</th>
+                                    <td>${access.reads}</td>
+                                </tr>
+                                <tr>
+                                    <th>Write Operations</th>
+                                    <td>${access.writes}</td>
+                                </tr>
+                                <tr>
+                                    <th>Total Operations</th>
+                                    <td>${access.total}</td>
+                                </tr>
+                                <tr>
+                                    <th>Access Intensity</th>
+                                    <td>${(access.intensity * 100).toFixed(2)}%</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Offset Calculations</div>
+                                <div class="card-body">
+                                    <p><strong>Physical Address:</strong> ${hexAddress}</p>
+                                    <p><strong>CODE Segment:</strong> CS:${(address - 0x100).toString(16).toUpperCase().padStart(4, '0')}</p>
+                                    <p><strong>DATA Segment:</strong> DS:${(address - 0x200).toString(16).toUpperCase().padStart(4, '0')}</p>
+                                    <p><strong>STACK Segment:</strong> SS:${(address - 0x300).toString(16).toUpperCase().padStart(4, '0')}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                detailsElement.innerHTML = html;
+            }
+            
+            // Fetch initial data
+            fetchMemoryData();
+            
+            // Set up refresh button
+            document.querySelector('.refresh-btn').addEventListener('click', fetchMemoryData);
+            
+            // Update tooltip position on mouse move
+            document.addEventListener('mousemove', function(e) {
+                if (tooltip.style.display === 'block') {
+                    tooltip.style.left = `${e.pageX + 10}px`;
+                    tooltip.style.top = `${e.pageY + 10}px`;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

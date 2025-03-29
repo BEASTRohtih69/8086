@@ -10,6 +10,8 @@ from cpu import CPU
 from memory import Memory
 from assembler import Assembler
 from debugger import Debugger
+from profiler import create_profiler
+from fix_instructions import fix_segment_handling
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -194,6 +196,13 @@ def execute_program():
             if request.form.get('detailed_profiling') == 'on':
                 session['detailed_profiling'] = profiler.generate_detailed_report()
             
+            # Store memory access data for heatmap visualization
+            session['profiler_data'] = {
+                'memory_reads': {str(addr): count for addr, count in profiler.memory_reads.items()},
+                'memory_writes': {str(addr): count for addr, count in profiler.memory_writes.items()},
+                'segment_accesses': profiler.segment_accesses
+            }
+            
             # Remove profiler from CPU and memory
             cpu.set_profiler(None)
             memory.set_profiler(None)
@@ -204,6 +213,8 @@ def execute_program():
         if profiler_results:
             flash('Profiling results available', 'info')
             session['profiler_results'] = profiler_results
+            # Also add info about memory heatmap
+            flash('Memory heatmap visualization is now available', 'info')
         
         return redirect(url_for('index'))
     
@@ -262,6 +273,16 @@ def profiler_results():
                            detailed_results=detailed_results)
 
 
+@app.route('/memory_heatmap')
+def memory_heatmap():
+    """Display an interactive memory heat map."""
+    # We'll pass any profiling data if available
+    profiler_active = 'profiler_results' in session
+    
+    return render_template('memory_heatmap.html', 
+                          profiler_active=profiler_active)
+
+
 @app.route('/api/register_state')
 def api_register_state():
     """API endpoint for getting the current register state"""
@@ -290,6 +311,65 @@ def api_memory():
         'start': start,
         'length': length,
         'memory': memory_dump
+    })
+
+
+@app.route('/api/memory_access')
+def api_memory_access():
+    """API endpoint for getting memory access data for the heatmap"""
+    # Check if we have profiling data in the session
+    access_data = {}
+    
+    # Create memory access data structure even if no profiling data is available
+    # This way we can initialize an empty heatmap
+    memory_segments = {
+        'CODE': {'start': 0x100, 'end': 0x100 + 255},
+        'DATA': {'start': 0x200, 'end': 0x200 + 255},
+        'STACK': {'start': 0x300, 'end': 0x300 + 255}
+    }
+    
+    # Initialize with empty data
+    for segment_name, segment_range in memory_segments.items():
+        for addr in range(segment_range['start'], segment_range['end'] + 1):
+            access_data[addr] = {
+                'reads': 0,
+                'writes': 0,
+                'total': 0,
+                'segment': segment_name
+            }
+    
+    # If we have profiling data, use it to populate the access counts
+    if 'profiler_data' in session:
+        profiler_data = session.get('profiler_data', {})
+        
+        # Add memory read data
+        for addr, count in profiler_data.get('memory_reads', {}).items():
+            addr = int(addr)  # Convert string keys to integers
+            if addr in access_data:
+                access_data[addr]['reads'] = count
+                access_data[addr]['total'] += count
+        
+        # Add memory write data
+        for addr, count in profiler_data.get('memory_writes', {}).items():
+            addr = int(addr)  # Convert string keys to integers
+            if addr in access_data:
+                access_data[addr]['writes'] = count
+                access_data[addr]['total'] += count
+    
+    # Get highest access count for normalization
+    max_access = 1  # Default to 1 to avoid division by zero
+    for addr_data in access_data.values():
+        if addr_data['total'] > max_access:
+            max_access = addr_data['total']
+    
+    # Add normalized intensity for coloring
+    for addr, data in access_data.items():
+        data['intensity'] = data['total'] / max_access if max_access > 0 else 0
+    
+    return jsonify({
+        'memory_access': access_data,
+        'max_access': max_access,
+        'segments': memory_segments
     })
 
 
