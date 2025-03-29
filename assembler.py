@@ -26,15 +26,16 @@ class Assembler:
         
         self.current_segment = 'CODE'  # Default to code segment
         self.variables = {}  # Variable to address mapping (for .DATA section)
+        self.entry_point = None  # Entry point for the program
         
         # Model sizes (memory models in MASM)
         self.memory_models = {
             'TINY': {'CODE': 0x0100, 'DATA': 0x0100, 'STACK': 0x0100},
-            'SMALL': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
-            'MEDIUM': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
-            'COMPACT': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
-            'LARGE': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
-            'HUGE': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000}
+            'SMALL': {'CODE': 0x0100, 'DATA': 0x0200, 'STACK': 0x0300},
+            'MEDIUM': {'CODE': 0x1000, 'DATA': 0x2000, 'STACK': 0x3000},
+            'COMPACT': {'CODE': 0x0100, 'DATA': 0x1000, 'STACK': 0x2000},
+            'LARGE': {'CODE': 0x1000, 'DATA': 0x2000, 'STACK': 0x3000},
+            'HUGE': {'CODE': 0x1000, 'DATA': 0x2000, 'STACK': 0x3000}
         }
         
         # Initialize opcode table
@@ -241,14 +242,20 @@ class Assembler:
             if ' PROC' in line.upper():
                 parts = line.upper().split(' PROC')
                 proc_name = parts[0].strip()
+                # Store procedure name with all case variations
                 self.labels[proc_name] = self.current_address
+                self.labels[proc_name.lower()] = self.current_address
+                self.labels[proc_name.upper()] = self.current_address
                 continue
                 
             # Check for regular labels with colon
             if ':' in line:
                 label, _, rest = line.partition(':')
                 label = label.strip()
+                # Store label with all case variations
                 self.labels[label] = self.current_address
+                self.labels[label.lower()] = self.current_address
+                self.labels[label.upper()] = self.current_address
                 line = rest.strip()
                 if not line:
                     continue
@@ -266,34 +273,213 @@ class Assembler:
         in_data_segment = False
         in_code_segment = True
         
-        # Second pass: assemble instructions
-        for line in processed_lines:
+        # Second pass: perform a complete rewrite to fix segment handling
+        print("\nSecond pass: rewriting segment handling")
+        print(f"Segments: CODE={self.segments['CODE']}, DATA={self.segments['DATA']}, STACK={self.segments['STACK']}")
+        print(f"Labels: {self.labels}")
+        print(f"Variables: {self.variables}")
+        
+        # Clear memory 
+        for addr in range(0, 0xFFFF, 256):
+            for offset in range(256):
+                self.memory.write_byte(addr + offset, 0)
+            
+        # Process DATA segment first
+        self.current_segment = 'DATA'
+        self.current_address = self.segments['DATA']
+        print(f"Processing DATA segment at {self.current_address:04X}")
+        
+        # Initialize segment detection flags based on an initial pass
+        in_data_segment = False
+        in_code_segment = False
+        in_stack_segment = False
+        
+        # Initial pass just to find segment markers
+        current_section = None
+        for i, line in enumerate(processed_lines):
+            if not line.strip():
+                continue
+                
             parts = line.split()
+            if not parts:
+                continue
+                
             mnemonic = parts[0].upper()
             
-            # Skip to the appropriate segment
+            print(f"Checking line: '{line}' - parsed mnemonic: '{mnemonic}'")
+            
+            # Match .DATA segment markers
+            if mnemonic == '.DATA':
+                current_section = 'DATA'
+                print(f"Line {i+1}: Found DATA section marker")
+            # Match .CODE segment markers
+            elif mnemonic == '.CODE':
+                current_section = 'CODE'
+                print(f"Line {i+1}: Found CODE section marker")
+            # Match .STACK segment markers
+            elif mnemonic == '.STACK':
+                current_section = 'STACK'
+                print(f"Line {i+1}: Found STACK section marker")
+            
+        print(f"Initial section detection: {'Found sections' if current_section else 'No sections found'}")
+        
+        # If no section markers found, default to CODE section for backward compatibility
+        if current_section is None:
+            print("No section markers found, assuming all code is in CODE section")
+            # Process everything as CODE
+            in_code_segment = True
+            in_data_segment = False
+            in_stack_segment = False
+        
+        # Now do the actual data segment processing with proper flags
+        in_data_segment = False
+        for line in processed_lines:
+            if not line.strip():
+                continue
+                
+            parts = line.split()
+            if not parts:
+                continue
+                
+            mnemonic = parts[0].upper()
+            
+            print(f"DATA check: {line}")
+            
             if mnemonic == '.DATA':
                 in_data_segment = True
                 in_code_segment = False
-                self.current_segment = 'DATA'
-                self.current_address = self.segments['DATA']
+                in_stack_segment = False
+                print(f"  Entering DATA segment")
                 continue
+                
+            if mnemonic == '.CODE' or mnemonic == '.STACK':
+                in_data_segment = False
+                print(f"  Leaving DATA segment")
+                continue
+                
+            if not in_data_segment:
+                continue
+                
+            # Skip labels and directives
+            if mnemonic.endswith(':') or mnemonic in ['.MODEL', 'END', 'PROC', 'ENDP']:
+                print(f"  Skipping label/directive: {line}")
+                continue
+            
+            print(f"DATA: Assembling at {self.current_address:04X}: {line}")
+            self._assemble_instruction(line)
+            
+        # Process CODE segment next
+        self.current_segment = 'CODE'
+        self.current_address = self.segments['CODE'] 
+        print(f"Processing CODE segment at {self.current_address:04X}")
+        
+        in_code_segment = False
+        for line in processed_lines:
+            if not line.strip():
+                continue
+                
+            parts = line.split()
+            if not parts:
+                continue
+                
+            mnemonic = parts[0].upper()
+            
+            print(f"CODE check: {line}")
             
             if mnemonic == '.CODE':
-                in_data_segment = False
                 in_code_segment = True
-                self.current_segment = 'CODE'
-                self.current_address = self.segments['CODE']
+                in_data_segment = False
+                in_stack_segment = False
+                print(f"  Entering CODE segment")
                 continue
+                
+            if mnemonic == '.DATA':
+                in_code_segment = False
+                in_data_segment = True
+                in_stack_segment = False
+                print(f"  Leaving CODE segment, entering DATA")
+                continue
+                
+            if mnemonic == '.STACK':
+                in_code_segment = False
+                in_data_segment = False
+                in_stack_segment = True
+                print(f"  Leaving CODE segment, entering STACK")
+                continue
+                
+            if not in_code_segment:
+                continue
+                
+            # Skip labels and directives
+            if mnemonic.endswith(':') or mnemonic in ['.MODEL', 'END', 'PROC', 'ENDP']:
+                print(f"  Skipping label/directive: {line}")
+                continue
+                
+            print(f"CODE: Assembling at {self.current_address:04X}: {line}")
+            self._assemble_instruction(line)
             
-            # Now assemble the instruction or process the directive
+        # Finally, process STACK segment if needed
+        self.current_segment = 'STACK'
+        self.current_address = self.segments['STACK']
+        print(f"Processing STACK segment at {self.current_address:04X}")
+        
+        in_stack_segment = False
+        for line in processed_lines:
+            if not line.strip():
+                continue
+                
+            parts = line.split()
+            mnemonic = parts[0].upper()
+            
+            if mnemonic == '.STACK':
+                in_stack_segment = True
+                # Handle stack size if specified
+                if len(parts) > 1:
+                    stack_size = self._parse_value(parts[1])
+                    self.cpu.set_register(self.cpu.SS, self.segments['STACK'])
+                    self.cpu.set_register(self.cpu.SP, stack_size)
+                continue
+                
+            if mnemonic == '.DATA' or mnemonic == '.CODE':
+                in_stack_segment = False
+                continue
+                
+            if not in_stack_segment:
+                continue
+                
+            # Skip labels and directives in stack segment
+            if mnemonic.endswith(':') or mnemonic in ['.MODEL', 'END', 'PROC', 'ENDP']:
+                continue
+                
+            print(f"STACK: Assembling at {self.current_address:04X}: {line}")
             self._assemble_instruction(line)
         
         # Make sure IP points to code segment (entry point)
-        if 'main' in self.labels:
+        print(f"\nSetting entry point:")
+        print(f"Entry point from END: {self.entry_point}")
+        print(f"Labels: {self.labels}")
+        print(f"Variables: {self.variables}")
+        
+        if self.entry_point is not None:
+            # Entry point was specified with END directive
+            self.cpu.set_register(self.cpu.IP, self.entry_point)
+            print(f"Using specified entry point: {self.entry_point:04X}")
+        elif 'start' in self.labels:
+            # Use 'start' as a common entry point name
+            self.cpu.set_register(self.cpu.IP, self.labels['start'])
+            print(f"Using 'start' label as entry point: {self.labels['start']:04X}")
+        elif 'main' in self.labels:
+            # Default to main label if entry point not specified
             self.cpu.set_register(self.cpu.IP, self.labels['main'])
+            print(f"Using 'main' label as entry point: {self.labels['main']:04X}")
+        elif 'main' in self.variables:
+            # Check variable map too (some labels might be stored there)
+            self.cpu.set_register(self.cpu.IP, self.variables['main'])
+            print(f"Using 'main' variable as entry point: {self.variables['main']:04X}")
         else:
+            # No entry point found, default to the start of code segment
             self.cpu.set_register(self.cpu.IP, 0)
+            print(f"No entry point found, defaulting to IP=0000")
         
         # Set CS to code segment
         self.cpu.set_register(self.cpu.CS, self.segments['CODE'])
@@ -374,8 +560,11 @@ class Assembler:
         if mnemonic == 'PROC':
             # Save the procedure name
             if len(parts) > 1:
-                proc_name = parts[1].upper()
+                proc_name = parts[1]
+                # Store with all case variations for flexibility
                 self.labels[proc_name] = self.current_address
+                self.labels[proc_name.lower()] = self.current_address
+                self.labels[proc_name.upper()] = self.current_address
             return
         
         if mnemonic == 'ENDP':
@@ -383,14 +572,31 @@ class Assembler:
             return
         
         if mnemonic == 'END':
-            # End of program
+            # End of program with optional entry point
+            if len(parts) > 1:
+                entry_point = parts[1]
+                # Store entry point with all case variations
+                entry_lower = entry_point.lower()
+                entry_upper = entry_point.upper()
+                
+                # Check if the entry point is defined
+                if entry_point in self.labels:
+                    self.entry_point = self.labels[entry_point]
+                elif entry_lower in self.labels:
+                    self.entry_point = self.labels[entry_lower]
+                elif entry_upper in self.labels:
+                    self.entry_point = self.labels[entry_upper]
+                else:
+                    print(f"Warning: Entry point {entry_point} not found in labels")
             return
         
         # Handle variable/label definition with DB (Define Byte)
         if len(parts) >= 3 and parts[1].upper() == 'DB':
             var_name = parts[0]
-            # Save variable address
+            # Save variable address with all case variations for flexibility
             self.variables[var_name] = self.current_address
+            self.variables[var_name.lower()] = self.current_address
+            self.variables[var_name.upper()] = self.current_address
             
             # Process the data
             rest = ' '.join(parts[2:])
@@ -465,16 +671,31 @@ class Assembler:
             for operand in operands:
                 # Handle OFFSET operator
                 if 'OFFSET' in operand.upper():
-                    label = operand.upper().replace('OFFSET', '').strip()
-                    if label in self.labels:
-                        parsed_operands.append(str(self.labels[label]))
+                    label_orig = operand.upper().replace('OFFSET', '').strip()
+                    # Try with different case variations
+                    label_lower = label_orig.lower()
+                    label_upper = label_orig.upper()
+                    
+                    # Check variables first
+                    if label_orig in self.variables:
+                        parsed_operands.append(str(self.variables[label_orig]))
+                    elif label_lower in self.variables:
+                        parsed_operands.append(str(self.variables[label_lower]))
+                    elif label_upper in self.variables:
+                        parsed_operands.append(str(self.variables[label_upper]))
+                    # Then check labels
+                    elif label_orig in self.labels:
+                        parsed_operands.append(str(self.labels[label_orig]))
+                    elif label_lower in self.labels:
+                        parsed_operands.append(str(self.labels[label_lower]))
+                    elif label_upper in self.labels:
+                        parsed_operands.append(str(self.labels[label_upper]))
                     else:
-                        raise ValueError(f"Unknown label for OFFSET: {label}")
+                        raise ValueError(f"Unknown label for OFFSET: {label_orig}, tried {label_lower} and {label_upper} too")
                 # Handle @DATA pseudo-register
                 elif '@DATA' in operand.upper():
-                    # In a real assembler, @DATA would be the segment address of the data segment
-                    # For simplicity, we'll use the default DS value (0)
-                    parsed_operands.append('0')
+                    # @DATA refers to the data segment address
+                    parsed_operands.append(str(self.segments['DATA']))
                 else:
                     parsed_operands.append(operand)
         
