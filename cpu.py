@@ -54,6 +54,7 @@ class CPU:
         self.registers = [0] * 14  # 14 registers (AX through FLAGS)
         self.halted = False
         self.instruction_count = 0
+        self.debug_mode = False  # Default to non-debug mode
         
         # Profiling hooks
         self.profiler = None
@@ -163,12 +164,8 @@ class CPU:
         if self.halted:
             return False
         
-        # Get the current IP and register states before execution (for debugging)
+        # Get physical address for current instruction
         phys_addr = self.get_physical_address(self.get_register(self.CS), self.get_register(self.IP))
-        before_ip = self.get_register(self.IP)
-        before_cx = self.get_register(self.CX)
-        before_ax = self.get_register(self.AX)
-        before_zf = self.get_flag(self.ZERO_FLAG)
         
         # Fetch the opcode
         opcode = self.fetch_byte()
@@ -183,32 +180,40 @@ class CPU:
         instruction_info = self.instruction_set.decode(opcode)
         mnemonic, handler = instruction_info
         
-        # Debug output for important instructions (DEC CX, JNZ/JNE, LOOP)
-        debug_opcodes = [0x49, 0x75, 0xE2]  # DEC CX (0x49), JNZ/JNE (0x75), LOOP (0xE2)
-        
-        # Debug all instructions during troubleshooting
-        print(f"Executing {mnemonic} at {phys_addr:#06x}, IP={before_ip:#04x}, CX={before_cx:#04x}, AX={before_ax:#04x}, ZF={before_zf}")
+        # Show detailed debug information if debug mode is enabled
+        if self.debug_mode:
+            inst_name = self.instruction_set.get_instruction_name(opcode)
+            print(f"Executing instruction: {inst_name} (opcode 0x{opcode:02X})")
+            print(f"Physical address: 0x{phys_addr:04X} (CS:IP = {self.get_register(self.CS):04X}:{self.get_register(self.IP)-1:04X})")
+            
+            # Show flags state
+            flags_str = ", ".join(f"{name}={self.get_flag(flag)}" 
+                           for flag, name in self.FLAG_NAMES.items())
+            print(f"Flags: {flags_str}")
         
         if handler:
             # If the instruction takes a ModR/M byte, fetch it
             if "r/m" in mnemonic:
                 modrm = self.fetch_byte()
+                if self.debug_mode:
+                    mod = (modrm >> 6) & 0x03
+                    reg = (modrm >> 3) & 0x07
+                    rm = modrm & 0x07
+                    print(f"ModR/M byte: 0x{modrm:02X} (mod={mod}, reg={reg}, r/m={rm})")
                 handler(modrm)
             else:
                 handler()
                 
-            # Debug output after execution
-            after_ip = self.get_register(self.IP)
-            after_cx = self.get_register(self.CX)
-            after_ax = self.get_register(self.AX)
-            after_zf = self.get_flag(self.ZERO_FLAG)
-            print(f"After {mnemonic}: IP={after_ip:#04x}, CX={after_cx:#04x}, AX={after_ax:#04x}, ZF={after_zf}")
-            
-            # Special debug for LOOP instruction
-            if opcode == 0xE2:  # LOOP
-                print(f"Special LOOP debug: IP change from {before_ip:#04x} to {after_ip:#04x}, CX={before_cx:#04x} -> {after_cx:#04x}")
-                
             self.instruction_count += 1
+            
+            # Show register state after instruction if debug mode is enabled
+            if self.debug_mode:
+                reg_state = []
+                for reg, name in self.REGISTER_NAMES.items():
+                    reg_state.append(f"{name}={self.get_register(reg):04X}")
+                print("Register state: " + ", ".join(reg_state))
+                print("-" * 50)  # Separator line
+                
             return True
         else:
             print(f"Unimplemented opcode: 0x{opcode:02X}")

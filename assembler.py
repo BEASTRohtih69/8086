@@ -164,6 +164,66 @@ class Assembler:
             'LOOPNE': {None: 0xE0},  # LOOPNE/LOOPNZ
             'LOOPNZ': {None: 0xE0},  # LOOPNE/LOOPNZ
             
+            # Logical Operations
+            'AND': {
+                'r8,r8': 0x20,       # AND r/m8, r8
+                'r16,r16': 0x21,     # AND r/m16, r16
+                'r8,imm8': 0x80,     # AND r/m8, imm8 (group 1)
+                'r16,imm16': 0x81,   # AND r/m16, imm16 (group 1)
+                'mem,r8': 0x20,      # AND m8, r8
+                'mem,r16': 0x21,     # AND m16, r16
+                'r8,mem': 0x22,      # AND r8, m8
+                'r16,mem': 0x23,     # AND r16, m16
+                'AL,imm8': 0x24,     # AND AL, imm8
+                'AX,imm16': 0x25,    # AND AX, imm16
+            },
+            'OR': {
+                'r8,r8': 0x08,       # OR r/m8, r8
+                'r16,r16': 0x09,     # OR r/m16, r16
+                'r8,imm8': 0x80,     # OR r/m8, imm8 (group 1)
+                'r16,imm16': 0x81,   # OR r/m16, imm16 (group 1)
+                'mem,r8': 0x08,      # OR m8, r8
+                'mem,r16': 0x09,     # OR m16, r16
+                'r8,mem': 0x0A,      # OR r8, m8
+                'r16,mem': 0x0B,     # OR r16, m16
+                'AL,imm8': 0x0C,     # OR AL, imm8
+                'AX,imm16': 0x0D,    # OR AX, imm16
+            },
+            'XOR': {
+                'r8,r8': 0x30,       # XOR r/m8, r8
+                'r16,r16': 0x31,     # XOR r/m16, r16
+                'r8,imm8': 0x80,     # XOR r/m8, imm8 (group 1)
+                'r16,imm16': 0x81,   # XOR r/m16, imm16 (group 1)
+                'mem,r8': 0x30,      # XOR m8, r8
+                'mem,r16': 0x31,     # XOR m16, r16
+                'r8,mem': 0x32,      # XOR r8, m8
+                'r16,mem': 0x33,     # XOR r16, m16
+                'AL,imm8': 0x34,     # XOR AL, imm8
+                'AX,imm16': 0x35,    # XOR AX, imm16
+            },
+            'CMP': {
+                'r8,r8': 0x38,       # CMP r/m8, r8
+                'r16,r16': 0x39,     # CMP r/m16, r16
+                'r8,imm8': 0x80,     # CMP r/m8, imm8 (group 1)
+                'r16,imm16': 0x81,   # CMP r/m16, imm16 (group 1)
+                'mem,r8': 0x38,      # CMP m8, r8
+                'mem,r16': 0x39,     # CMP m16, r16
+                'r8,mem': 0x3A,      # CMP r8, m8
+                'r16,mem': 0x3B,     # CMP r16, m16
+                'AL,imm8': 0x3C,     # CMP AL, imm8
+                'AX,imm16': 0x3D,    # CMP AX, imm16
+            },
+            'TEST': {
+                'r8,r8': 0x84,       # TEST r/m8, r8
+                'r16,r16': 0x85,     # TEST r/m16, r16
+                'r8,imm8': 0xF6,     # TEST r/m8, imm8 (group 3)
+                'r16,imm16': 0xF7,   # TEST r/m16, imm16 (group 3)
+                'mem,r8': 0x84,      # TEST m8, r8
+                'mem,r16': 0x85,     # TEST m16, r16
+                'AL,imm8': 0xA8,     # TEST AL, imm8
+                'AX,imm16': 0xA9,    # TEST AX, imm16
+            },
+
             # Miscellaneous
             'NOP': {None: 0x90},     # NOP
             'HLT': {None: 0xF4},     # HLT
@@ -1223,6 +1283,124 @@ class Assembler:
                     raise ValueError(f"INC for 8-bit registers not implemented yet")
             else:
                 raise ValueError(f"Unknown register: {reg}")
+                
+        # Handle logical operations (AND, OR, XOR)
+        elif mnemonic in ['AND', 'OR', 'XOR']:
+            if len(operands) != 2:
+                raise ValueError(f"{mnemonic} requires 2 operands, got {len(operands)}")
+                
+            # Get operand types and values
+            dest = operands[0].upper()
+            src = operands[1]
+                
+            # Handle register-register operations
+            if dest in self.registers and src.upper() in self.registers:
+                dest_num, dest_size = self.registers[dest]
+                src_num, src_size = self.registers[src.upper()]
+                
+                # Both 16-bit registers
+                if dest_size == 16 and src_size == 16:
+                    if mnemonic == 'AND':
+                        machine_code.append(0x21)  # AND r/m16, r16
+                    elif mnemonic == 'OR':
+                        machine_code.append(0x09)  # OR r/m16, r16
+                    elif mnemonic == 'XOR':
+                        machine_code.append(0x31)  # XOR r/m16, r16
+                        
+                    # Create ModR/M byte: mod 11 (register to register) + reg (src) + r/m (dest)
+                    mod_rm = 0xC0 | (src_num << 3) | dest_num
+                    machine_code.append(mod_rm)
+                # Handle 8-bit registers
+                elif dest_size == 8 and src_size == 8:
+                    if mnemonic == 'AND':
+                        machine_code.append(0x20)  # AND r/m8, r8
+                    elif mnemonic == 'OR':
+                        machine_code.append(0x08)  # OR r/m8, r8
+                    elif mnemonic == 'XOR':
+                        machine_code.append(0x30)  # XOR r/m8, r8
+                        
+                    # Create ModR/M byte: mod 11 (register to register) + reg (src) + r/m (dest)
+                    mod_rm = 0xC0 | (src_num << 3) | dest_num
+                    machine_code.append(mod_rm)
+                else:
+                    raise ValueError(f"Operand size mismatch for {mnemonic}")
+            
+            # Handle register-immediate operations for AX/AL
+            elif (dest == 'AX' or dest == 'AL') and self._get_operand_type(src) == 'immediate':
+                imm_value = self._parse_value(src)
+                
+                if dest == 'AX':
+                    # Operation with AX and immediate
+                    if mnemonic == 'AND':
+                        machine_code.append(0x25)  # AND AX, imm16
+                    elif mnemonic == 'OR':
+                        machine_code.append(0x0D)  # OR AX, imm16
+                    elif mnemonic == 'XOR':
+                        machine_code.append(0x35)  # XOR AX, imm16
+                    
+                    # Append immediate value (16-bit, little endian)
+                    machine_code.append(imm_value & 0xFF)
+                    machine_code.append((imm_value >> 8) & 0xFF)
+                
+                elif dest == 'AL':
+                    # Operation with AL and immediate (8-bit)
+                    if mnemonic == 'AND':
+                        machine_code.append(0x24)  # AND AL, imm8
+                    elif mnemonic == 'OR':
+                        machine_code.append(0x0C)  # OR AL, imm8
+                    elif mnemonic == 'XOR':
+                        machine_code.append(0x34)  # XOR AL, imm8
+                    
+                    # Append immediate value (8-bit)
+                    machine_code.append(imm_value & 0xFF)
+            else:
+                raise ValueError(f"Unsupported operand combination for {mnemonic}: {dest}, {src}")
+                
+        # Handle compare operations (CMP)
+        elif mnemonic == 'CMP':
+            if len(operands) != 2:
+                raise ValueError(f"CMP requires 2 operands, got {len(operands)}")
+                
+            # Get operand types and values
+            dest = operands[0].upper()
+            src = operands[1]
+                
+            # Handle register-register operations
+            if dest in self.registers and src.upper() in self.registers:
+                dest_num, dest_size = self.registers[dest]
+                src_num, src_size = self.registers[src.upper()]
+                
+                # Both 16-bit registers
+                if dest_size == 16 and src_size == 16:
+                    machine_code.append(0x39)  # CMP r/m16, r16
+                    # Create ModR/M byte: mod 11 (register to register) + reg (src) + r/m (dest)
+                    mod_rm = 0xC0 | (src_num << 3) | dest_num
+                    machine_code.append(mod_rm)
+                # Handle 8-bit registers
+                elif dest_size == 8 and src_size == 8:
+                    machine_code.append(0x38)  # CMP r/m8, r8
+                    # Create ModR/M byte: mod 11 (register to register) + reg (src) + r/m (dest)
+                    mod_rm = 0xC0 | (src_num << 3) | dest_num
+                    machine_code.append(mod_rm)
+                else:
+                    raise ValueError(f"Operand size mismatch for CMP")
+            
+            # Handle register-immediate operations for AX/AL
+            elif (dest == 'AX' or dest == 'AL') and self._get_operand_type(src) == 'immediate':
+                imm_value = self._parse_value(src)
+                
+                if dest == 'AX':
+                    machine_code.append(0x3D)  # CMP AX, imm16
+                    # Append immediate value (16-bit, little endian)
+                    machine_code.append(imm_value & 0xFF)
+                    machine_code.append((imm_value >> 8) & 0xFF)
+                
+                elif dest == 'AL':
+                    machine_code.append(0x3C)  # CMP AL, imm8
+                    # Append immediate value (8-bit)
+                    machine_code.append(imm_value & 0xFF)
+            else:
+                raise ValueError(f"Unsupported operand combination for CMP: {dest}, {src}")
         
         else:
             raise ValueError(f"Unsupported instruction: {mnemonic}")

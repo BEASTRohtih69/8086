@@ -73,31 +73,31 @@ class InstructionSet:
         instruction_map[0x5F] = ("POP DI", self._pop_di)
         
         # Load effective address
-        instruction_map[0x8D] = ("LEA r16, m", self._lea_r16_m)
+        # instruction_map[0x8D] = ("LEA r16, m", self._lea_r16_m)
         
         # Load pointer using DS/ES
-        instruction_map[0xC4] = ("LES r16, m16", self._les_r16_m16)
-        instruction_map[0xC5] = ("LDS r16, m16", self._lds_r16_m16)
+        # instruction_map[0xC4] = ("LES r16, m16", self._les_r16_m16)
+        # instruction_map[0xC5] = ("LDS r16, m16", self._lds_r16_m16)
         
         # Flag register operations
-        instruction_map[0x9C] = ("PUSHF", self._pushf)
-        instruction_map[0x9D] = ("POPF", self._popf)
-        instruction_map[0x9E] = ("SAHF", self._sahf)
-        instruction_map[0x9F] = ("LAHF", self._lahf)
+        # instruction_map[0x9C] = ("PUSHF", self._pushf)
+        # instruction_map[0x9D] = ("POPF", self._popf)
+        # instruction_map[0x9E] = ("SAHF", self._sahf)
+        # instruction_map[0x9F] = ("LAHF", self._lahf)
         
         # XLAT (translate)
-        instruction_map[0xD7] = ("XLAT", self._xlat)
+        # instruction_map[0xD7] = ("XLAT", self._xlat)
         
         # IN/OUT - I/O port operations
-        instruction_map[0xE4] = ("IN AL, imm8", self._in_al_imm8)
-        instruction_map[0xE5] = ("IN AX, imm8", self._in_ax_imm8)
-        instruction_map[0xEC] = ("IN AL, DX", self._in_al_dx)
-        instruction_map[0xED] = ("IN AX, DX", self._in_ax_dx)
+        # instruction_map[0xE4] = ("IN AL, imm8", self._in_al_imm8)
+        # instruction_map[0xE5] = ("IN AX, imm8", self._in_ax_imm8)
+        # instruction_map[0xEC] = ("IN AL, DX", self._in_al_dx)
+        # instruction_map[0xED] = ("IN AX, DX", self._in_ax_dx)
         
-        instruction_map[0xE6] = ("OUT imm8, AL", self._out_imm8_al)
-        instruction_map[0xE7] = ("OUT imm8, AX", self._out_imm8_ax)
-        instruction_map[0xEE] = ("OUT DX, AL", self._out_dx_al)
-        instruction_map[0xEF] = ("OUT DX, AX", self._out_dx_ax)
+        # instruction_map[0xE6] = ("OUT imm8, AL", self._out_imm8_al)
+        # instruction_map[0xE7] = ("OUT imm8, AX", self._out_imm8_ax)
+        # instruction_map[0xEE] = ("OUT DX, AL", self._out_dx_al)
+        # instruction_map[0xEF] = ("OUT DX, AX", self._out_dx_ax)
         
         # ----- ARITHMETIC INSTRUCTIONS -----
         
@@ -165,20 +165,20 @@ class InstructionSet:
         instruction_map[0x3D] = ("CMP AX, imm16", self._cmp_ax_imm16)
         
         # Multiplication and division instructions
-        instruction_map[0xF6] = ("MUL/DIV Group", self._f6_group_handler)  # Opcode 0xF6 covers multiple instructions
-        instruction_map[0xF7] = ("MUL/DIV Group Word", self._f7_group_handler)  # Opcode 0xF7 covers multiple word instructions
+        # instruction_map[0xF6] = ("MUL/DIV Group", self._f6_group_handler)  # Opcode 0xF6 covers multiple instructions
+        # instruction_map[0xF7] = ("MUL/DIV Group Word", self._f7_group_handler)  # Opcode 0xF7 covers multiple word instructions
         
         # Conversion instructions
-        instruction_map[0x98] = ("CBW", self._cbw)  # Convert byte to word
-        instruction_map[0x99] = ("CWD", self._cwd)  # Convert word to doubleword
+        # instruction_map[0x98] = ("CBW", self._cbw)  # Convert byte to word
+        # instruction_map[0x99] = ("CWD", self._cwd)  # Convert word to doubleword
         
         # Decimal adjust instructions
-        instruction_map[0x27] = ("DAA", self._daa)  # Decimal adjust after addition
-        instruction_map[0x2F] = ("DAS", self._das)  # Decimal adjust after subtraction
-        instruction_map[0x37] = ("AAA", self._aaa)  # ASCII adjust after addition
-        instruction_map[0x3F] = ("AAS", self._aas)  # ASCII adjust after subtraction
-        instruction_map[0xD4] = ("AAM", self._aam)  # ASCII adjust after multiplication
-        instruction_map[0xD5] = ("AAD", self._aad)  # ASCII adjust before division
+        # instruction_map[0x27] = ("DAA", self._daa)  # Decimal adjust after addition
+        # instruction_map[0x2F] = ("DAS", self._das)  # Decimal adjust after subtraction
+        # instruction_map[0x37] = ("AAA", self._aaa)  # ASCII adjust after addition
+        # instruction_map[0x3F] = ("AAS", self._aas)  # ASCII adjust after subtraction
+        # instruction_map[0xD4] = ("AAM", self._aam)  # ASCII adjust after multiplication
+        # instruction_map[0xD5] = ("AAD", self._aad)  # ASCII adjust before division
         
         # ----- LOGICAL INSTRUCTIONS -----
         
@@ -216,10 +216,10 @@ class InstructionSet:
         instruction_map[0xA9] = ("TEST AX, imm16", self._test_ax_imm16)
         
         # Shift and rotate instructions
-        instruction_map[0xD0] = ("Shift/Rotate Group Byte 1", self._d0_group_handler)
-        instruction_map[0xD1] = ("Shift/Rotate Group Word 1", self._d1_group_handler)
-        instruction_map[0xD2] = ("Shift/Rotate Group Byte CL", self._d2_group_handler)
-        instruction_map[0xD3] = ("Shift/Rotate Group Word CL", self._d3_group_handler)
+        # instruction_map[0xD0] = ("Shift/Rotate Group Byte 1", self._d0_group_handler)
+        # instruction_map[0xD1] = ("Shift/Rotate Group Word 1", self._d1_group_handler)
+        # instruction_map[0xD2] = ("Shift/Rotate Group Byte CL", self._d2_group_handler)
+        # instruction_map[0xD3] = ("Shift/Rotate Group Word CL", self._d3_group_handler)
         
         # ----- STRING INSTRUCTIONS -----
         
@@ -245,7 +245,7 @@ class InstructionSet:
         instruction_map[0xEB] = ("JMP rel8", self._jmp_rel8)
         instruction_map[0xE9] = ("JMP rel16", self._jmp_rel16)
         instruction_map[0xEA] = ("JMP ptr16:16", self._jmp_ptr16_16)
-        instruction_map[0xFF] = ("JMP/CALL Indirect Group", self._ff_group_handler)
+        # instruction_map[0xFF] = ("JMP/CALL Indirect Group", self._ff_group_handler)
         
         # Conditional jumps
         instruction_map[0x70] = ("JO rel8", self._jo_rel8)

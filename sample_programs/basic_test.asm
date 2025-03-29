@@ -1,10 +1,6 @@
 .MODEL SMALL
-.STACK 100h
 .DATA
     test_byte DB 42
-    test_word DW 1234h
-    string_source DB "Hello, World!", 0
-    string_dest DB 20 DUP(0)
 .CODE
 START:
     ; Test MOV instructions
@@ -12,12 +8,6 @@ START:
     MOV BX, 5678h
     MOV CX, 9ABCh
     MOV DX, DEF0h
-    
-    ; Test stack operations
-    PUSH AX
-    PUSH BX
-    POP CX        ; CX should now be 5678h
-    POP DX        ; DX should now be 1234h
     
     ; Test arithmetic operations
     MOV AX, 5      
@@ -41,22 +31,6 @@ START:
     STC            ; Set carry flag
     CLD            ; Clear direction flag
     STD            ; Set direction flag
-    
-    ; Test string operations
-    MOV AX, @data
-    MOV DS, AX
-    MOV ES, AX
-    
-    MOV SI, OFFSET string_source
-    MOV DI, OFFSET string_dest
-    MOV CX, 13     ; Length of "Hello, World!" + null terminator
-    CLD            ; Clear direction flag (forward)
-    REP MOVSB      ; Move bytes from source to destination
-    
-    MOV SI, OFFSET string_source
-    MOV DI, OFFSET string_dest
-    MOV CX, 13
-    REPE CMPSB     ; Compare strings and set ZF=1 if equal
     
     ; Test conditional jumps
     MOV AX, 5

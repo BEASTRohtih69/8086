@@ -1,73 +1,141 @@
+#!/usr/bin/env python3
+"""
+8086 Simulator - Simple Test Runner
+A simple non-interactive test script to verify CPU instruction execution
+"""
+
 import sys
+import argparse
 from cpu import CPU
 from memory import Memory
 from assembler import Assembler
 from instructions import InstructionSet
-import fix_instructions
 
-# Create components
-memory = Memory()
-cpu = CPU(memory)
-assembler = Assembler(cpu, memory)
-instruction_set = InstructionSet(cpu)
+def main():
+    """Main entry point for the test script"""
+    parser = argparse.ArgumentParser(description='Test the 8086 simulator with a simple program')
+    parser.add_argument('program', help='Assembly program file to test')
+    parser.add_argument('--max-instructions', type=int, default=20, 
+                      help='Maximum number of instructions to execute (default: 20)')
+    parser.add_argument('--verbose', action='store_true',
+                      help='Show detailed information about each instruction')
+    parser.add_argument('--dump-memory', type=str, default=None,
+                      help='Memory range to dump after execution (format: "start:length", e.g. "0x200:32")')
+    
+    args = parser.parse_args()
+    
+    # Initialize components
+    memory = Memory(1024*64)  # 64K memory
+    cpu = CPU(memory)
+    cpu.debug_mode = args.verbose  # Set CPU debug mode based on verbose flag
+    assembler = Assembler(cpu, memory)
+    
+    # Load the program with improved segment handling
+    try:
+        from fix_instructions import fix_segment_handling
+        print(f"Loading test program '{args.program}'")
+        fix_segment_handling(assembler, args.program)
+        print(f"Program loaded successfully")
+    except Exception as e:
+        print(f"Error loading program: {e}")
+        return 1
+    
+    # Display initial state
+    print("\nInitial Register State:")
+    for reg in ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'CS', 'DS', 'SS', 'ES', 'IP', 'FLAGS']:
+        value = cpu.get_register(getattr(cpu, reg))
+        print(f"{reg}: {value:04X}", end="  ")
+        if reg in ['DX', 'SP', 'ES']:  # Line break after these registers
+            print()
+    print("\n")
+    
+    # Execute instructions with debug output
+    print(f"Executing up to {args.max_instructions} instructions:")
+    instruction_count = 0
+    
+    while not cpu.halted and instruction_count < args.max_instructions:
+        # Show current instruction
+        cs = cpu.get_register(cpu.CS)
+        ip = cpu.get_register(cpu.IP)
+        physical_addr = cpu.get_physical_address(cs, ip)
+        opcode = memory.read_byte(physical_addr)
+        
+        print(f"[{instruction_count:04d}] Executing at {physical_addr:04X}, opcode: {opcode:02X}")
+        
+        # Execute the instruction
+        if not hasattr(cpu, 'instruction_set'):
+            from instructions import InstructionSet
+            cpu.instruction_set = InstructionSet(cpu)
+            print("Initialized instruction set within CPU")
+        
+        result = cpu.execute_instruction()
+        if not result:
+            print(f"Failed to execute instruction with opcode: {opcode:02X}")
+            break
+        
+        instruction_count += 1
+        
+        # Show register state after each instruction
+        print("Registers: ", end="")
+        for reg in ['AX', 'CX', 'DX', 'BX', 'IP', 'FLAGS']:
+            value = cpu.get_register(getattr(cpu, reg))
+            print(f"{reg}={value:04X} ", end="")
+        print()
+        
+        # Provide special debug for flag instructions
+        if opcode in [0xF8, 0xF9, 0xF5, 0xFC, 0xFD, 0xFA, 0xFB]:  # Flag instructions
+            flags = " ".join(f"{name}={cpu.get_flag(flag)}" 
+                      for flag, name in cpu.FLAG_NAMES.items())
+            print(f"Flags: {flags}")
+    
+    print(f"\nExecution completed. Executed {instruction_count} instructions.")
+    
+    # Dump memory if requested
+    if args.dump_memory:
+        try:
+            start, length = args.dump_memory.split(':')
+            start_addr = int(start, 16) if start.startswith('0x') else int(start)
+            length = int(length)
+            
+            print(f"\nMemory dump at {start_addr:04X}, length {length} bytes:")
+            print("Addr | Hex          | ASCII")
+            print("-" * 50)
+            
+            # Print in 16-byte rows
+            for i in range(0, length, 16):
+                addr = start_addr + i
+                hex_values = []
+                ascii_values = []
+                
+                # Process up to 16 bytes (or remaining length)
+                row_length = min(16, length - i)
+                for j in range(row_length):
+                    byte = memory.read_byte(addr + j)
+                    hex_values.append(f"{byte:02X}")
+                    
+                    # Convert to ASCII if printable
+                    if 32 <= byte <= 126:  # Printable ASCII range
+                        ascii_values.append(chr(byte))
+                    else:
+                        ascii_values.append('.')
+                
+                # Print the row
+                hex_str = ' '.join(hex_values).ljust(48)
+                ascii_str = ''.join(ascii_values)
+                print(f"{addr:04X} | {hex_str} | {ascii_str}")
+        except Exception as e:
+            print(f"Error dumping memory: {e}")
+    
+    # Final register state
+    print("\nFinal Register State:")
+    for reg in ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'CS', 'DS', 'SS', 'ES', 'IP', 'FLAGS']:
+        value = cpu.get_register(getattr(cpu, reg))
+        print(f"{reg}: {value:04X}", end="  ")
+        if reg in ['DX', 'SP', 'ES']:  # Line break after these registers
+            print()
+    print("\n")
+    
+    return 0
 
-# Reset everything
-cpu.reset()
-memory.reset()
-
-# Load our simple test file
-filename = "sample_programs/test_simple.asm"
-print(f"Loading program: {filename}")
-fix_instructions.fix_segment_handling(assembler, filename)
-
-# Check memory for the HLT instruction
-code_start = 0x0100  # Code segment
-found_hlt = False
-for i in range(16):  # Just check the first few bytes
-    addr = code_start + i
-    byte = memory.read_byte(addr)
-    print(f"{addr:04X}: {byte:02X} {'(HLT)' if byte == 0xF4 else ''}")
-    if byte == 0xF4:
-        found_hlt = True
-
-if not found_hlt:
-    print("HLT instruction (0xF4) not found in memory")
-else:
-    print("HLT instruction found in memory")
-
-# Show current CPU state - this is before fix
-print(f"Before Fix - CS: {cpu.get_register(cpu.CS):04X}")
-print(f"Before Fix - IP: {cpu.get_register(cpu.IP):04X}")
-
-# Calculate physical address
-ip = cpu.get_register(cpu.IP)
-cs = cpu.get_register(cpu.CS)
-physical_addr = cpu.get_physical_address(cs, ip)
-opcode = memory.read_byte(physical_addr)
-print(f"Before Fix - At CS:IP ({cs:04X}:{ip:04X}) = {physical_addr:05X}, Opcode = {opcode:02X}")
-
-# Fix the CS and IP registers to correctly point to our code
-# The formula for physical address is (segment << 4) + offset
-# Our HLT instruction is at physical address 0x0100
-# So we need to set CS:IP such that (CS << 4) + IP = 0x0100
-# Option 1: CS=0x0010, IP=0x0000 → (0x0010 << 4) + 0x0000 = 0x0100
-# Option 2: CS=0x0000, IP=0x0100 → (0x0000 << 4) + 0x0100 = 0x0100
-# Let's try option 1
-cpu.set_register(cpu.CS, 0x0010)  # CS = 0x0010
-cpu.set_register(cpu.IP, 0x0000)  # IP = 0x0000
-
-# Show updated CPU state
-print(f"After Fix - CS: {cpu.get_register(cpu.CS):04X}")
-print(f"After Fix - IP: {cpu.get_register(cpu.IP):04X}")
-
-# Calculate new physical address
-ip = cpu.get_register(cpu.IP)
-cs = cpu.get_register(cpu.CS)
-physical_addr = cpu.get_physical_address(cs, ip)
-opcode = memory.read_byte(physical_addr)
-print(f"After Fix - At CS:IP ({cs:04X}:{ip:04X}) = {physical_addr:05X}, Opcode = {opcode:02X}")
-
-if opcode == 0xF4:
-    print("Found HLT at current IP")
-else:
-    print("Not at HLT instruction")
+if __name__ == "__main__":
+    sys.exit(main())
