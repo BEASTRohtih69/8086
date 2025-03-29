@@ -119,14 +119,28 @@
                                         <input type="number" class="form-control" id="max_instructions" name="max_instructions" value="1000" min="1">
                                     </div>
                                     
-                                    <div class="mb-2 form-check">
-                                        <input type="checkbox" class="form-check-input" id="enable_profiling" name="enable_profiling">
-                                        <label class="form-check-label" for="enable_profiling">Enable profiling</label>
-                                    </div>
-                                    
-                                    <div class="mb-2 form-check">
-                                        <input type="checkbox" class="form-check-input" id="detailed_profiling" name="detailed_profiling">
-                                        <label class="form-check-label" for="detailed_profiling">Detailed profiling</label>
+                                    <div class="card mb-3">
+                                        <div class="card-header">
+                                            Performance Profiling Options
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-2 form-check">
+                                                <input type="checkbox" class="form-check-input" id="enable_profiling" name="enable_profiling">
+                                                <label class="form-check-label" for="enable_profiling">Enable profiling</label>
+                                                <small class="form-text text-muted d-block">Track instruction execution, memory access, and performance metrics.</small>
+                                            </div>
+                                            
+                                            <div class="mb-2 form-check">
+                                                <input type="checkbox" class="form-check-input" id="detailed_profiling" name="detailed_profiling">
+                                                <label class="form-check-label" for="detailed_profiling">Detailed profiling</label>
+                                                <small class="form-text text-muted d-block">Include additional visualizations and memory access patterns.</small>
+                                            </div>
+                                            
+                                            <div class="alert alert-info small mb-0">
+                                                <i class="bi bi-info-circle-fill me-2"></i>
+                                                Enabling profiling will allow you to use the <a href="{{ url_for('memory_heatmap') }}" class="alert-link">Memory Heatmap</a> feature to visualize memory access patterns during program execution.
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <button type="submit" class="btn btn-success mb-2">Run Program</button>

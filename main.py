@@ -26,6 +26,11 @@ try:
     PROFILER_AVAILABLE = True
 except ImportError:
     PROFILER_AVAILABLE = False
+    # Define a fallback if not available
+    def create_profiler(cpu, memory):
+        """Fallback function when profiler is not available."""
+        print("Profiling not available - profiler module could not be imported.")
+        return None
 
 
 def main():

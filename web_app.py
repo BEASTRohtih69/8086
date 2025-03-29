@@ -12,4 +12,6 @@ if __name__ == "__main__":
     os.makedirs('temp', exist_ok=True)
     
     # Run the app
+    # Use 0.0.0.0 to make the server accessible externally
+    # The port 5000 is default for Flask
     app.run(host='0.0.0.0', port=5000, debug=True)
