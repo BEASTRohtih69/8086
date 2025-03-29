@@ -65,6 +65,7 @@ def index():
     sample_programs = [
         {"name": "Hello World", "path": "sample_programs/hello.asm"},
         {"name": "Simple Test", "path": "sample_programs/test_simple.asm"},
+        {"name": "Loop Test", "path": "sample_programs/loop_test.asm"},
         {"name": "Performance Test", "path": "sample_programs/performance_test.asm"}
     ]
     
@@ -232,8 +233,39 @@ def execute_program():
 def step_instruction():
     """Execute a single instruction"""
     try:
+        # Get the current state
+        before_ip = cpu.get_register(cpu.IP)
+        before_cx = cpu.get_register(cpu.CX)
+        before_zf = cpu.get_flag(cpu.ZERO_FLAG)
+        
+        # Get physical address of the instruction
+        phys_addr = cpu.get_physical_address(cpu.get_register(cpu.CS), before_ip)
+        
+        # Execute a single instruction
         debugger.step_instruction()
-        flash('Executed one instruction', 'success')
+        
+        # Get the instruction mnemonic if possible
+        try:
+            opcode = memory.read_byte(phys_addr)
+            if hasattr(cpu, 'instruction_set'):
+                mnemonic = cpu.instruction_set.get_instruction_name(opcode)
+            else:
+                mnemonic = f"Opcode 0x{opcode:02X}"
+        except:
+            mnemonic = "Unknown"
+        
+        # Get the after state
+        after_ip = cpu.get_register(cpu.IP)
+        after_cx = cpu.get_register(cpu.CX)
+        after_zf = cpu.get_flag(cpu.ZERO_FLAG)
+        
+        # Enhanced debug info, especially for important instructions
+        debug_info = f"Executed {mnemonic} at {phys_addr:#06x}, " + \
+                     f"IP changed from {before_ip:#04x} to {after_ip:#04x}, " + \
+                     f"CX: {before_cx:#04x} → {after_cx:#04x}, " + \
+                     f"ZF: {before_zf} → {after_zf}"
+                     
+        flash(debug_info, 'info')
     except Exception as e:
         flash(f'Error stepping instruction: {str(e)}', 'danger')
     

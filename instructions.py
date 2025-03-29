@@ -100,6 +100,16 @@ class InstructionSet:
         instruction_map[0xF4] = ("HLT", self._hlt)
         instruction_map[0xCD] = ("INT imm8", self._int_imm8)
         
+        # DEC instructions
+        instruction_map[0x48] = ("DEC AX", self._dec_ax)
+        instruction_map[0x49] = ("DEC CX", self._dec_cx)
+        instruction_map[0x4A] = ("DEC DX", self._dec_dx)
+        instruction_map[0x4B] = ("DEC BX", self._dec_bx)
+        instruction_map[0x4C] = ("DEC SP", self._dec_sp)
+        instruction_map[0x4D] = ("DEC BP", self._dec_bp)
+        instruction_map[0x4E] = ("DEC SI", self._dec_si)
+        instruction_map[0x4F] = ("DEC DI", self._dec_di)
+        
         return instruction_map
     
     def decode(self, opcode):
@@ -108,6 +118,13 @@ class InstructionSet:
             return self.instruction_map[opcode]
         else:
             return (f"Unknown opcode: 0x{opcode:02X}", None)
+            
+    def get_instruction_name(self, opcode):
+        """Get the mnemonic for an opcode (useful for debugging)."""
+        if opcode in self.instruction_map:
+            return self.instruction_map[opcode][0]
+        else:
+            return f"Unknown opcode: 0x{opcode:02X}"
     
     # Instruction implementations
     def _decode_modrm(self, modrm_byte):
@@ -853,3 +870,82 @@ class InstructionSet:
                 
                 # Print the string
                 print(string_value, end='')
+                
+    # DEC instructions - decrement a register by 1
+    def _dec_ax(self):
+        """Decrement AX by 1."""
+        value = self.cpu.get_register(self.cpu.AX)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.AX, result)
+        # Update flags (note: CF is not affected by DEC)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_cx(self):
+        """Decrement CX by 1."""
+        value = self.cpu.get_register(self.cpu.CX)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.CX, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_dx(self):
+        """Decrement DX by 1."""
+        value = self.cpu.get_register(self.cpu.DX)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.DX, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_bx(self):
+        """Decrement BX by 1."""
+        value = self.cpu.get_register(self.cpu.BX)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.BX, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_sp(self):
+        """Decrement SP by 1."""
+        value = self.cpu.get_register(self.cpu.SP)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.SP, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_bp(self):
+        """Decrement BP by 1."""
+        value = self.cpu.get_register(self.cpu.BP)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.BP, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_si(self):
+        """Decrement SI by 1."""
+        value = self.cpu.get_register(self.cpu.SI)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.SI, result)
+        self._update_flags_after_dec(value, result)
+        
+    def _dec_di(self):
+        """Decrement DI by 1."""
+        value = self.cpu.get_register(self.cpu.DI)
+        result = (value - 1) & 0xFFFF
+        self.cpu.set_register(self.cpu.DI, result)
+        self._update_flags_after_dec(value, result)
+    
+    def _update_flags_after_dec(self, operand, result):
+        """Update flags after a DEC operation (note: CF is not affected by DEC)."""
+        # Set ZF if result is zero
+        self.cpu.set_flag(self.cpu.ZERO_FLAG, result == 0)
+        
+        # Set SF if the result is negative (bit 15 for 16-bit result)
+        self.cpu.set_flag(self.cpu.SIGN_FLAG, (result & 0x8000) != 0)
+        
+        # Set PF if the number of bits set in the lower byte is even
+        parity = 1
+        low_byte = result & 0xFF
+        for i in range(8):
+            parity ^= ((low_byte >> i) & 1)
+        self.cpu.set_flag(self.cpu.PARITY_FLAG, parity == 0)
+        
+        # Set AF if there was a borrow from bit 3 to bit 4
+        self.cpu.set_flag(self.cpu.AUXILIARY_CARRY_FLAG, ((operand ^ 1 ^ result) & 0x10) != 0)
+        
+        # Set OF if there was an overflow (rare for DEC but can happen when decrementing 0x8000)
+        self.cpu.set_flag(self.cpu.OVERFLOW_FLAG, operand == 0x8000)

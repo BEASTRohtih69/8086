@@ -163,6 +163,12 @@ class CPU:
         if self.halted:
             return False
         
+        # Get the current IP and register states before execution (for debugging)
+        phys_addr = self.get_physical_address(self.get_register(self.CS), self.get_register(self.IP))
+        before_ip = self.get_register(self.IP)
+        before_cx = self.get_register(self.CX)
+        before_zf = self.get_flag(self.ZERO_FLAG)
+        
         # Fetch the opcode
         opcode = self.fetch_byte()
         
@@ -176,6 +182,11 @@ class CPU:
         instruction_info = self.instruction_set.decode(opcode)
         mnemonic, handler = instruction_info
         
+        # Debug output for important instructions (DEC CX, JNZ/JNE)
+        debug_opcodes = [0x49, 0x75]  # DEC CX (0x49), JNZ/JNE (0x75)
+        if opcode in debug_opcodes:
+            print(f"Executing {mnemonic} at {phys_addr:#06x}, IP={before_ip:#04x}, CX={before_cx:#04x}, ZF={before_zf}")
+        
         if handler:
             # If the instruction takes a ModR/M byte, fetch it
             if "r/m" in mnemonic:
@@ -183,6 +194,14 @@ class CPU:
                 handler(modrm)
             else:
                 handler()
+                
+            # Debug output after execution for important instructions
+            if opcode in debug_opcodes:
+                after_ip = self.get_register(self.IP)
+                after_cx = self.get_register(self.CX)
+                after_zf = self.get_flag(self.ZERO_FLAG)
+                print(f"After {mnemonic}: IP={after_ip:#04x}, CX={after_cx:#04x}, ZF={after_zf}")
+                
             self.instruction_count += 1
             return True
         else:

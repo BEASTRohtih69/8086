@@ -93,6 +93,8 @@ class Assembler:
             },
             'JE': {'rel8': 0x74},    # JE rel8
             'JNE': {'rel8': 0x75},   # JNE rel8
+            'JZ': {'rel8': 0x74},     # JZ rel8 (alias for JE)
+            'JNZ': {'rel8': 0x75},    # JNZ rel8 (alias for JNE)
             'JL': {'rel8': 0x7C},    # JL rel8
             'JLE': {'rel8': 0x7E},   # JLE rel8
             'JG': {'rel8': 0x7F},    # JG rel8
@@ -105,6 +107,18 @@ class Assembler:
             # Call and Return
             'CALL': {'rel16': 0xE8}, # CALL rel16
             'RET': {None: 0xC3},     # RET
+            
+            # DEC instructions
+            'DEC': {
+                'AX': 0x48,  # DEC AX
+                'CX': 0x49,  # DEC CX
+                'DX': 0x4A,  # DEC DX
+                'BX': 0x4B,  # DEC BX
+                'SP': 0x4C,  # DEC SP
+                'BP': 0x4D,  # DEC BP
+                'SI': 0x4E,  # DEC SI
+                'DI': 0x4F,  # DEC DI
+            },
             
             # Stack operations
             'PUSH': {
@@ -867,6 +881,29 @@ class Assembler:
                 machine_code.append((offset >> 8) & 0xFF)
             else:
                 raise ValueError(f"Unknown label: {target}")
+        
+        elif mnemonic == 'DEC':
+            if len(operands) != 1:
+                raise ValueError(f"DEC requires 1 operand, got {len(operands)}")
+            
+            reg = operands[0].upper()
+            
+            # DEC register (16-bit)
+            if reg in self.registers:
+                reg_num, reg_size = self.registers[reg]
+                
+                if reg_size == 16:
+                    # Check that it's one of the main registers (AX, CX, DX, BX, SP, BP, SI, DI)
+                    if reg in ['AX', 'CX', 'DX', 'BX', 'SP', 'BP', 'SI', 'DI']:
+                        # DEC r16 - opcode is 0x48 + register number
+                        opcode = 0x48 + reg_num
+                        machine_code.append(opcode)
+                    else:
+                        raise ValueError(f"DEC not supported for register {reg}")
+                else:
+                    raise ValueError(f"DEC for 8-bit registers not implemented yet")
+            else:
+                raise ValueError(f"Unknown register: {reg}")
         
         else:
             raise ValueError(f"Unsupported instruction: {mnemonic}")
