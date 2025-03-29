@@ -1,6 +1,7 @@
 """
 CPU module for 8086 simulator.
 Implements the CPU state, registers, flags, and instruction execution.
+Includes hooks for performance profiling.
 """
 
 from memory import Memory
@@ -54,6 +55,9 @@ class CPU:
         self.halted = False
         self.instruction_count = 0
         
+        # Profiling hooks
+        self.profiler = None
+        
         # Set segment registers to their default values
         # Real 8086 would use 0xFFFF for CS to point to reset vector at 0xFFFF0
         # But we'll use 0 for simplicity and to avoid memory range issues
@@ -70,8 +74,16 @@ class CPU:
     
     def reset(self):
         """Reset the CPU to its initial state."""
+        # Store the profiler reference before reinitializing
+        profiler = self.profiler
         self.__init__(self.memory)
+        # Restore the profiler reference after reinitializing
+        self.profiler = profiler
         self.halted = False
+        
+    def set_profiler(self, profiler):
+        """Set a profiler for performance monitoring."""
+        self.profiler = profiler
     
     def get_register(self, reg):
         """Get the value of a register."""

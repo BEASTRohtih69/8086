@@ -20,6 +20,13 @@ try:
 except ImportError:
     GUI_AVAILABLE = False
 
+# Import profiling components if available
+try:
+    from profiler import create_profiler
+    PROFILER_AVAILABLE = True
+except ImportError:
+    PROFILER_AVAILABLE = False
+
 
 def main():
     """Main entry point for the 8086 simulator"""
@@ -34,6 +41,12 @@ def main():
                        help='Start with graphical user interface (if available)')
     parser.add_argument('-t', '--text', action='store_true',
                        help='Force text mode (no GUI)')
+    parser.add_argument('-p', '--profile', action='store_true',
+                       help='Enable performance profiling')
+    parser.add_argument('--detailed-profile', action='store_true',
+                       help='Enable detailed performance profiling with visualizations')
+    parser.add_argument('--max-instructions', type=int, default=10000,
+                        help='Maximum number of instructions to execute (default: 10000)')
     
     args = parser.parse_args()
     
@@ -43,6 +56,14 @@ def main():
     assembler = Assembler(cpu, memory)
     ui = UI(cpu, memory)
     debugger = Debugger(cpu, memory, ui)
+    
+    # Initialize profiler if requested and available
+    profiler = None
+    if args.profile and PROFILER_AVAILABLE:
+        profiler = create_profiler(cpu, memory)
+        cpu.set_profiler(profiler)
+        memory.set_profiler(profiler)
+        print("Performance profiling enabled.")
     
     # If a program file is provided, load it
     if args.program and os.path.exists(args.program):
@@ -62,6 +83,10 @@ def main():
             print(f"Error loading program: {e}")
             sys.exit(1)
     
+    # Start profiling if enabled
+    if profiler:
+        profiler.start_profiling()
+    
     # Check if we should use the GUI
     use_gui = args.gui or (GUI_AVAILABLE and not args.text)
     
@@ -77,7 +102,15 @@ def main():
         else:
             # Run the program normally
             ui.show_welcome()
-            ui.run_simulation(cpu)
+            ui.run_simulation(cpu, max_instructions=args.max_instructions)
+    
+    # Stop profiling and show results if enabled
+    if profiler:
+        profiler.stop_profiling()
+        if args.detailed_profile:
+            print(profiler.generate_detailed_report())
+        else:
+            print(profiler.generate_summary_report())
     
     print("Simulator exited.")
 

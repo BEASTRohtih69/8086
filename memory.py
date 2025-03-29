@@ -10,10 +10,20 @@ class Memory:
         """Initialize memory with specified size (default 64KB)."""
         self.size = size
         self.memory = bytearray(size)
+        # Profiling hooks
+        self.profiler = None
     
     def reset(self):
         """Reset memory to all zeros."""
+        # Store the profiler before resetting
+        profiler = self.profiler
         self.memory = bytearray(self.size)
+        # Restore the profiler after resetting
+        self.profiler = profiler
+        
+    def set_profiler(self, profiler):
+        """Set a profiler for performance monitoring."""
+        self.profiler = profiler
     
     def read_byte(self, address):
         """Read a byte from memory at the specified address."""

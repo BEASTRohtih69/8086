@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8086 Simulator</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <style>
+        .register-box {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        
+        .memory-display {
+            font-family: monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        
+        .byte-cell {
+            display: inline-block;
+            padding: 2px 4px;
+            margin: 1px;
+            min-width: 30px;
+            text-align: center;
+        }
+        
+        .code-editor {
+            font-family: monospace;
+            width: 100%;
+            height: 300px;
+            resize: vertical;
+        }
+        
+        .flag-badge {
+            margin-right: 5px;
+        }
+        
+        .simulator-section {
+            margin-bottom: 20px;
+        }
+        
+        .highlight {
+            background-color: var(--bs-info);
+            color: var(--bs-dark);
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <header class="mb-4">
+            <h1 class="text-center">8086 Microprocessor Simulator</h1>
+            <p class="text-center lead">A comprehensive simulator for the 8086 instruction set</p>
+        </header>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="row">
+            <!-- Control Panel -->
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4 class="mb-0">Control Panel</h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Program Loading Options -->
+                        <div class="mb-3">
+                            <h5>Load Program</h5>
+                            <form action="{{ url_for('load_program') }}" method="post" enctype="multipart/form-data">
+                                <div class="mb-2">
+                                    <label for="program_file" class="form-label">Upload ASM file:</label>
+                                    <input class="form-control" type="file" id="program_file" name="program_file">
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <label for="sample_program" class="form-label">Or select a sample program:</label>
+                                    <select class="form-select" id="sample_program" name="sample_program">
+                                        <option value="">-- Select a sample program --</option>
+                                        {% for program in sample_programs %}
+                                            <option value="{{ program.path }}">{{ program.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary">Load Program</button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- Execution Controls -->
+                        <div class="mb-3">
+                            <h5>Execution Controls</h5>
+                            
+                            <div class="d-grid gap-2">
+                                <form action="{{ url_for('execute_program') }}" method="post">
+                                    <div class="mb-2">
+                                        <label for="max_instructions" class="form-label">Max instructions to execute:</label>
+                                        <input type="number" class="form-control" id="max_instructions" name="max_instructions" value="1000" min="1">
+                                    </div>
+                                    
+                                    <div class="mb-2 form-check">
+                                        <input type="checkbox" class="form-check-input" id="enable_profiling" name="enable_profiling">
+                                        <label class="form-check-label" for="enable_profiling">Enable profiling</label>
+                                    </div>
+                                    
+                                    <div class="mb-2 form-check">
+                                        <input type="checkbox" class="form-check-input" id="detailed_profiling" name="detailed_profiling">
+                                        <label class="form-check-label" for="detailed_profiling">Detailed profiling</label>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-success mb-2">Run Program</button>
+                                </form>
+                                
+                                <form action="{{ url_for('step_instruction') }}" method="post">
+                                    <button type="submit" class="btn btn-info mb-2">Step Instruction</button>
+                                </form>
+                                
+                                <form action="{{ url_for('reset_simulator') }}" method="post">
+                                    <button type="submit" class="btn btn-danger mb-2">Reset Simulator</button>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- Breakpoint Controls -->
+                        <div class="mb-3">
+                            <h5>Breakpoints</h5>
+                            
+                            <form action="{{ url_for('toggle_breakpoint') }}" method="post">
+                                <div class="mb-2 input-group">
+                                    <input type="text" class="form-control" id="breakpoint_address" name="breakpoint_address" placeholder="Address (hex)" aria-label="Breakpoint address">
+                                    <button type="submit" class="btn btn-outline-secondary">Toggle Breakpoint</button>
+                                </div>
+                            </form>
+                            
+                            <form action="{{ url_for('run_to_breakpoint') }}" method="post" class="d-grid">
+                                <button type="submit" class="btn btn-outline-primary">Run to Breakpoint</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CPU State Display -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4 class="mb-0">CPU State</h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Registers -->
+                        <div class="simulator-section">
+                            <h5>Registers</h5>
+                            <div class="row">
+                                {% for reg_name, reg_value in registers.items() %}
+                                    <div class="col-md-3 col-sm-6 mb-2">
+                                        <div class="register-box border">
+                                            <strong>{{ reg_name }}:</strong> 
+                                            <span class="float-end">{{ '%04X' | format(reg_value) }}</span>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- Flags -->
+                        <div class="simulator-section">
+                            <h5>Flags</h5>
+                            {% for flag_name, flag_value in flags.items() %}
+                                <span class="badge rounded-pill {% if flag_value %}bg-success{% else %}bg-secondary{% endif %} flag-badge">
+                                    {{ flag_name }}: {{ flag_value }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Memory Viewer Tabs -->
+                        <div class="simulator-section">
+                            <h5>Memory</h5>
+                            <ul class="nav nav-tabs" id="memoryTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="code-tab" data-bs-toggle="tab" data-bs-target="#code" type="button" role="tab" aria-controls="code" aria-selected="true">Code (0x0100)</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="data-tab" data-bs-toggle="tab" data-bs-target="#data" type="button" role="tab" aria-controls="data" aria-selected="false">Data (0x0200)</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="stack-tab" data-bs-toggle="tab" data-bs-target="#stack" type="button" role="tab" aria-controls="stack" aria-selected="false">Stack (0x0300)</button>
+                                </li>
+                            </ul>
+                            <div class="tab-content" id="memoryTabsContent">
+                                <!-- Code Segment -->
+                                <div class="tab-pane fade show active memory-display" id="code" role="tabpanel" aria-labelledby="code-tab">
+                                    {% for i in range(0, code_memory|length, 16) %}
+                                        <div class="mb-1">
+                                            <strong>{{ '0x%04X:' | format(i + 0x100) }}</strong>
+                                            {% for j in range(16) %}
+                                                {% if i + j < code_memory|length %}
+                                                    <span class="byte-cell 
+                                                        {% if registers.IP == i + j and registers.CS == 0x10 %}highlight{% endif %}">
+                                                        {{ '%02X' | format(code_memory[i + j]) }}
+                                                    </span>
+                                                {% endif %}
+                                            {% endfor %}
+                                            
+                                            <span class="ms-2">|</span>
+                                            
+                                            {% for j in range(16) %}
+                                                {% if i + j < code_memory|length %}
+                                                    {% if code_memory[i + j] >= 32 and code_memory[i + j] <= 126 %}
+                                                        <span>{{ chr(code_memory[i + j]) }}</span>
+                                                    {% else %}
+                                                        <span>.</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Data Segment -->
+                                <div class="tab-pane fade memory-display" id="data" role="tabpanel" aria-labelledby="data-tab">
+                                    {% for i in range(0, data_memory|length, 16) %}
+                                        <div class="mb-1">
+                                            <strong>{{ '0x%04X:' | format(i + 0x200) }}</strong>
+                                            {% for j in range(16) %}
+                                                {% if i + j < data_memory|length %}
+                                                    <span class="byte-cell">
+                                                        {{ '%02X' | format(data_memory[i + j]) }}
+                                                    </span>
+                                                {% endif %}
+                                            {% endfor %}
+                                            
+                                            <span class="ms-2">|</span>
+                                            
+                                            {% for j in range(16) %}
+                                                {% if i + j < data_memory|length %}
+                                                    {% if data_memory[i + j] >= 32 and data_memory[i + j] <= 126 %}
+                                                        <span>{{ chr(data_memory[i + j]) }}</span>
+                                                    {% else %}
+                                                        <span>.</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Stack Segment -->
+                                <div class="tab-pane fade memory-display" id="stack" role="tabpanel" aria-labelledby="stack-tab">
+                                    {% for i in range(0, stack_memory|length, 16) %}
+                                        <div class="mb-1">
+                                            <strong>{{ '0x%04X:' | format(i + 0x300) }}</strong>
+                                            {% for j in range(16) %}
+                                                {% if i + j < stack_memory|length %}
+                                                    <span class="byte-cell
+                                                        {% if (i + 0x300 + j) == (registers.SS * 16 + registers.SP) %}highlight{% endif %}">
+                                                        {{ '%02X' | format(stack_memory[i + j]) }}
+                                                    </span>
+                                                {% endif %}
+                                            {% endfor %}
+                                            
+                                            <span class="ms-2">|</span>
+                                            
+                                            {% for j in range(16) %}
+                                                {% if i + j < stack_memory|length %}
+                                                    {% if stack_memory[i + j] >= 32 and stack_memory[i + j] <= 126 %}
+                                                        <span>{{ chr(stack_memory[i + j]) }}</span>
+                                                    {% else %}
+                                                        <span>.</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Code Editor -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4 class="mb-0">Assembly Editor</h4>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('load_program') }}" method="post">
+                            <div class="mb-3">
+                                <textarea class="code-editor form-control" id="code_input" name="code_input" placeholder="; Enter your 8086 assembly code here
+.CODE
+    MOV AX, 1
+    MOV BX, 2
+    ADD AX, BX
+    HLT"></textarea>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Assemble and Load</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh for register and memory display
+        function refreshCpuState() {
+            fetch('/api/register_state')
+                .then(response => response.json())
+                .then(data => {
+                    // Update page with new data without full reload
+                    console.log('Got updated CPU state:', data);
+                    // In a real app, we would update the DOM here
+                });
+        }
+        
+        // Add auto-refresh functionality if needed
+        // setInterval(refreshCpuState, 5000);
+    </script>
+</body>
+</html>

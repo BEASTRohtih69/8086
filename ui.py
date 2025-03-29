@@ -222,9 +222,16 @@ class UI:
         
         return opcodes.get(opcode, f"Unknown opcode: {opcode:02X}")
     
-    def run_simulation(self, cpu):
-        """Run the simulation with a simple UI."""
+    def run_simulation(self, cpu, max_instructions=None):
+        """Run the simulation with a simple UI and optional instruction limit."""
+        instruction_count = 0
+        
         while not cpu.halted:
+            # Check if we've reached the instruction limit
+            if max_instructions is not None and instruction_count >= max_instructions:
+                print(f"\nReached maximum instruction count: {max_instructions}")
+                break
+                
             self.update_display()
             
             command = input("\nPress Enter to step, 'q' to quit: ").strip().lower()
@@ -232,8 +239,10 @@ class UI:
                 break
             
             result = cpu.execute_instruction()
+            if result:
+                instruction_count += 1
             if not result:
                 break
         
         self.update_display()
-        print("\nSimulation ended.")
+        print(f"\nSimulation ended after executing {instruction_count} instructions.")
