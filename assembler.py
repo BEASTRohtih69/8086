@@ -129,6 +129,41 @@ class Assembler:
                 'r16': 0x58,         # POP r16 (base, +reg for different registers)
             },
             
+            # String Operations
+            'MOVSB': {None: 0xA4},   # MOVSB
+            'MOVSW': {None: 0xA5},   # MOVSW
+            'CMPSB': {None: 0xA6},   # CMPSB
+            'CMPSW': {None: 0xA7},   # CMPSW
+            'STOSB': {None: 0xAA},   # STOSB
+            'STOSW': {None: 0xAB},   # STOSW
+            'LODSB': {None: 0xAC},   # LODSB
+            'LODSW': {None: 0xAD},   # LODSW
+            'SCASB': {None: 0xAE},   # SCASB
+            'SCASW': {None: 0xAF},   # SCASW
+            
+            # String Repeat Prefixes
+            'REP': {None: 0xF3},     # REP prefix
+            'REPE': {None: 0xF3},    # REPE/REPZ prefix (same as REP)
+            'REPZ': {None: 0xF3},    # REPE/REPZ prefix (same as REP)
+            'REPNE': {None: 0xF2},   # REPNE/REPNZ prefix
+            'REPNZ': {None: 0xF2},   # REPNE/REPNZ prefix (same as REPNE)
+            
+            # Processor Control
+            'CLD': {None: 0xFC},     # Clear direction flag
+            'STD': {None: 0xFD},     # Set direction flag
+            'CLC': {None: 0xF8},     # Clear carry flag
+            'STC': {None: 0xF9},     # Set carry flag
+            'CLI': {None: 0xFA},     # Clear interrupt flag
+            'STI': {None: 0xFB},     # Set interrupt flag
+            'CMC': {None: 0xF5},     # Complement carry flag
+            
+            # LOOP Instructions
+            'LOOP': {None: 0xE2},    # LOOP
+            'LOOPE': {None: 0xE1},   # LOOPE/LOOPZ
+            'LOOPZ': {None: 0xE1},   # LOOPE/LOOPZ
+            'LOOPNE': {None: 0xE0},  # LOOPNE/LOOPNZ
+            'LOOPNZ': {None: 0xE0},  # LOOPNE/LOOPNZ
+            
             # Miscellaneous
             'NOP': {None: 0x90},     # NOP
             'HLT': {None: 0xF4},     # HLT
@@ -758,6 +793,47 @@ class Assembler:
             machine_code.append(0xF4)
         elif mnemonic == 'RET':
             machine_code.append(0xC3)
+        # Processor control instructions (flag operations)
+        elif mnemonic == 'CLD':
+            machine_code.append(0xFC)  # Clear direction flag
+        elif mnemonic == 'STD':
+            machine_code.append(0xFD)  # Set direction flag
+        elif mnemonic == 'CLC':
+            machine_code.append(0xF8)  # Clear carry flag
+        elif mnemonic == 'STC':
+            machine_code.append(0xF9)  # Set carry flag
+        elif mnemonic == 'CLI':
+            machine_code.append(0xFA)  # Clear interrupt flag
+        elif mnemonic == 'STI':
+            machine_code.append(0xFB)  # Set interrupt flag
+        elif mnemonic == 'CMC':
+            machine_code.append(0xF5)  # Complement carry flag
+        # String operations
+        elif mnemonic == 'MOVSB':
+            machine_code.append(0xA4)  # Move byte from string to string
+        elif mnemonic == 'MOVSW':
+            machine_code.append(0xA5)  # Move word from string to string
+        elif mnemonic == 'CMPSB':
+            machine_code.append(0xA6)  # Compare bytes in string
+        elif mnemonic == 'CMPSW':
+            machine_code.append(0xA7)  # Compare words in string
+        elif mnemonic == 'STOSB':
+            machine_code.append(0xAA)  # Store AL in string
+        elif mnemonic == 'STOSW':
+            machine_code.append(0xAB)  # Store AX in string
+        elif mnemonic == 'LODSB':
+            machine_code.append(0xAC)  # Load byte from string to AL
+        elif mnemonic == 'LODSW':
+            machine_code.append(0xAD)  # Load word from string to AX
+        elif mnemonic == 'SCASB':
+            machine_code.append(0xAE)  # Scan string for byte equal to AL
+        elif mnemonic == 'SCASW':
+            machine_code.append(0xAF)  # Scan string for word equal to AX
+        # String repeat prefixes
+        elif mnemonic == 'REP' or mnemonic == 'REPE' or mnemonic == 'REPZ':
+            machine_code.append(0xF3)  # REP/REPE/REPZ prefix
+        elif mnemonic == 'REPNE' or mnemonic == 'REPNZ':
+            machine_code.append(0xF2)  # REPNE/REPNZ prefix
         elif mnemonic == 'PUSH':
             if len(operands) != 1:
                 raise ValueError(f"PUSH requires 1 operand, got {len(operands)}")
