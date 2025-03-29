@@ -17,6 +17,11 @@ class Assembler:
         self.current_address = 0
         self.segment_prefix = None  # Current segment override prefix
         
+        # Segment flags to track which section we're in
+        self.in_data_segment = False
+        self.in_code_segment = True
+        self.in_stack_segment = False
+        
         # Segment addresses (for .MODEL, .DATA, .CODE directives)
         self.segments = {
             'CODE': 0x0000,  # Default code segment
@@ -133,21 +138,33 @@ class Assembler:
         self.current_address = 0
         self.segment_prefix = None
         self.current_segment = 'CODE'
+        self.entry_point = None
         
-        # Reset segments to defaults
-        self.segments = {
-            'CODE': 0x0000,
-            'DATA': 0x0000,
-            'STACK': 0x0000
-        }
-        
-        # First pass: process directives and gather labels
-        with open(filename, 'r') as f:
-            lines = f.readlines()
-        
-        # Pre-processing to handle directives and gather symbols
+        # Initialize segment flags
         in_data_segment = False
         in_code_segment = True
+        in_stack_segment = False
+        
+        # Reset segments to defaults with fixed offsets
+        self.segments = {
+            'CODE': 0x0100,  # Start from 0x100 (like COM files)
+            'DATA': 0x0200,  # Data starts at 0x200
+            'STACK': 0x0300  # Stack starts at 0x300
+        }
+        
+        try:
+            with open(filename, 'r') as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            print(f"Error: File '{filename}' not found")
+            return False
+        except Exception as e:
+            print(f"Error loading file: {e}")
+            return False
+            
+        # First pass: Calculate total size of each segment
+        # and collect segment markers in the assembly file
+        segment_markers = []  # [(line_index, segment_type), ...]
         proc_active = None
         
         processed_lines = []
@@ -221,7 +238,7 @@ class Assembler:
                 continue
             
             # Handle variable definitions in data segment
-            if in_data_segment and ' DB ' in line.upper():
+            if self.in_data_segment and ' DB ' in line.upper():
                 var_parts = line.split(' DB ', 1)
                 var_name = var_parts[0].strip()
                 self.variables[var_name] = self.current_address

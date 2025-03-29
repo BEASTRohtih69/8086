@@ -47,8 +47,17 @@ def main():
     # If a program file is provided, load it
     if args.program and os.path.exists(args.program):
         try:
-            assembler.load_program(args.program)
-            print(f"Program '{args.program}' loaded successfully.")
+            # Use the improved segment handling for program loading
+            try:
+                from fix_instructions import fix_segment_handling
+                print(f"Using improved segment handling for '{args.program}'")
+                fix_segment_handling(assembler, args.program)
+                print(f"Program '{args.program}' loaded successfully with fixed segment handling.")
+            except ImportError:
+                # Fall back to standard loading if improved handling isn't available
+                print(f"Using standard loader for '{args.program}'")
+                assembler.load_program(args.program)
+                print(f"Program '{args.program}' loaded successfully.")
         except Exception as e:
             print(f"Error loading program: {e}")
             sys.exit(1)
