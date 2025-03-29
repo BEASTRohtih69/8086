@@ -164,6 +164,22 @@ class Assembler:
             'LOOPNE': {None: 0xE0},  # LOOPNE/LOOPNZ
             'LOOPNZ': {None: 0xE0},  # LOOPNE/LOOPNZ
             
+            # Conversion Instructions
+            'CBW': {None: 0x98},     # Convert Byte to Word
+            'CWD': {None: 0x99},     # Convert Word to Doubleword
+            
+            # Flag Register Operations
+            'LAHF': {None: 0x9F},    # Load AH from Flags
+            'SAHF': {None: 0x9E},    # Store AH to Flags
+            
+            # Multiplication/Division Instructions
+            'MUL': {'r8': 0xF6, 'r16': 0xF7},  # Unsigned multiply
+            'DIV': {'r8': 0xF6, 'r16': 0xF7},  # Unsigned divide
+            
+            # Shift/Rotate Instructions
+            'ROL': {'r8,1': 0xD0, 'r16,1': 0xD1, 'r8,CL': 0xD2, 'r16,CL': 0xD3},  # Rotate left
+            'ROR': {'r8,1': 0xD0, 'r16,1': 0xD1, 'r8,CL': 0xD2, 'r16,CL': 0xD3},  # Rotate right
+            
             # Logical Operations
             'AND': {
                 'r8,r8': 0x20,       # AND r/m8, r8
@@ -853,6 +869,18 @@ class Assembler:
             machine_code.append(0xF4)
         elif mnemonic == 'RET':
             machine_code.append(0xC3)
+            
+        # Conversion instructions with no operands
+        elif mnemonic == 'CBW':
+            machine_code.append(0x98)
+        elif mnemonic == 'CWD':
+            machine_code.append(0x99)
+            
+        # Flag register operations with no operands
+        elif mnemonic == 'LAHF':
+            machine_code.append(0x9F)
+        elif mnemonic == 'SAHF':
+            machine_code.append(0x9E)
         # Processor control instructions (flag operations)
         elif mnemonic == 'CLD':
             machine_code.append(0xFC)  # Clear direction flag
@@ -1120,6 +1148,102 @@ class Assembler:
                 # ModR/M byte: mod=11 (register to register), reg=dest, r/m=src
                 modrm = 0xC0 | (dest_num << 3) | src_num
                 machine_code.append(modrm)
+        
+        # Multiplication and Division instructions
+        elif mnemonic == 'MUL':
+            if len(operands) != 1:
+                raise ValueError(f"MUL requires 1 operand, got {len(operands)}")
+            
+            operand = operands[0]
+            operand_type = self._get_operand_type(operand)
+            
+            if operand_type == 'register':
+                reg_num, reg_size = self.registers[operand.upper()]
+                
+                if reg_size == 8:
+                    # MUL r8 - Multiply AL by r8, result in AX
+                    machine_code.append(0xF6)  # Group 4 byte operations
+                    # ModR/M byte: mod=11 (register mode), reg=100 (MUL opcode), r/m=register
+                    modrm = 0xE0 | reg_num  # 0xE0 = 11100000 (mod=11, reg=100 for MUL, r/m=reg)
+                    machine_code.append(modrm)
+                else:
+                    # MUL r16 - Multiply AX by r16, result in DX:AX
+                    machine_code.append(0xF7)  # Group 4 word operations
+                    # ModR/M byte: mod=11 (register mode), reg=100 (MUL opcode), r/m=register
+                    modrm = 0xE0 | reg_num  # 0xE0 = 11100000 (mod=11, reg=100 for MUL, r/m=reg)
+                    machine_code.append(modrm)
+            else:
+                raise ValueError(f"Unsupported MUL operand type: {operand_type}")
+                
+        elif mnemonic == 'DIV':
+            if len(operands) != 1:
+                raise ValueError(f"DIV requires 1 operand, got {len(operands)}")
+            
+            operand = operands[0]
+            operand_type = self._get_operand_type(operand)
+            
+            if operand_type == 'register':
+                reg_num, reg_size = self.registers[operand.upper()]
+                
+                if reg_size == 8:
+                    # DIV r8 - Divide AX by r8, quotient in AL, remainder in AH
+                    machine_code.append(0xF6)  # Group 4 byte operations
+                    # ModR/M byte: mod=11 (register mode), reg=110 (DIV opcode), r/m=register
+                    modrm = 0xF0 | reg_num  # 0xF0 = 11110000 (mod=11, reg=110 for DIV, r/m=reg)
+                    machine_code.append(modrm)
+                else:
+                    # DIV r16 - Divide DX:AX by r16, quotient in AX, remainder in DX
+                    machine_code.append(0xF7)  # Group 4 word operations
+                    # ModR/M byte: mod=11 (register mode), reg=110 (DIV opcode), r/m=register
+                    modrm = 0xF0 | reg_num  # 0xF0 = 11110000 (mod=11, reg=110 for DIV, r/m=reg)
+                    machine_code.append(modrm)
+            else:
+                raise ValueError(f"Unsupported DIV operand type: {operand_type}")
+                
+        # Shift/Rotate instructions
+        elif mnemonic == 'ROL' or mnemonic == 'ROR':
+            if len(operands) != 2:
+                raise ValueError(f"{mnemonic} requires 2 operands, got {len(operands)}")
+            
+            dest, count = operands
+            dest_type = self._get_operand_type(dest)
+            
+            if dest_type != 'register':
+                raise ValueError(f"Unsupported {mnemonic} destination type: {dest_type}")
+                
+            reg_num, reg_size = self.registers[dest.upper()]
+            
+            # Determine if count is 1 or CL register
+            if count == '1':
+                # ROL/ROR r8/r16, 1
+                if reg_size == 8:
+                    machine_code.append(0xD0)  # Shift/rotate r/m8 by 1
+                else:
+                    machine_code.append(0xD1)  # Shift/rotate r/m16 by 1
+                    
+                # ModR/M byte: mod=11 (register mode), reg=000 for ROL or 001 for ROR, r/m=register
+                if mnemonic == 'ROL':
+                    modrm = 0xC0 | (0 << 3) | reg_num  # reg=000 for ROL
+                else:  # ROR
+                    modrm = 0xC0 | (1 << 3) | reg_num  # reg=001 for ROR
+                machine_code.append(modrm)
+                
+            elif count.upper() == 'CL':
+                # ROL/ROR r8/r16, CL
+                if reg_size == 8:
+                    machine_code.append(0xD2)  # Shift/rotate r/m8 by CL
+                else:
+                    machine_code.append(0xD3)  # Shift/rotate r/m16 by CL
+                    
+                # ModR/M byte: mod=11 (register mode), reg=000 for ROL or 001 for ROR, r/m=register
+                if mnemonic == 'ROL':
+                    modrm = 0xC0 | (0 << 3) | reg_num  # reg=000 for ROL
+                else:  # ROR
+                    modrm = 0xC0 | (1 << 3) | reg_num  # reg=001 for ROR
+                machine_code.append(modrm)
+            else:
+                # For other immediate counts, would need to handle specially
+                raise ValueError(f"Unsupported {mnemonic} count: {count}, must be 1 or CL")
         
         elif mnemonic == 'INT':
             if len(operands) != 1:
