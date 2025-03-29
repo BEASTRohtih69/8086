@@ -44,12 +44,14 @@ def index():
     register_state = cpu.get_register_state()
     flag_state = cpu.get_flag_state()
     
-    # Get memory dump for display
-    code_start = 0x100  # Default CODE segment start
+    # Get memory dump for display (matches the segment layout in CPU init)
+    # For COM programs, all segments point to the same place
+    segment_base = 0x100  # Segment base: 0x0010 << 4 = 0x0100
+    code_start = segment_base            # Code segment (CS)
     code_size = 256
-    data_start = 0x200  # Default DATA segment start
+    data_start = segment_base            # Data segment (DS) - same as CS for COM
     data_size = 256
-    stack_start = 0x300  # Default STACK segment start
+    stack_start = segment_base + 0x200   # Stack segment offset from CS
     stack_size = 256
     
     code_memory = memory.dump(code_start, code_size)
@@ -322,10 +324,12 @@ def api_memory_access():
     
     # Create memory access data structure even if no profiling data is available
     # This way we can initialize an empty heatmap
+    # For COM programs, all segments point to the same place initially
+    segment_base = 0x100  # Segment base: 0x0010 << 4 = 0x0100
     memory_segments = {
-        'CODE': {'start': 0x100, 'end': 0x100 + 255},
-        'DATA': {'start': 0x200, 'end': 0x200 + 255},
-        'STACK': {'start': 0x300, 'end': 0x300 + 255}
+        'CODE': {'start': segment_base, 'end': segment_base + 255},  # CS section
+        'DATA': {'start': segment_base, 'end': segment_base + 255},  # DS section (same as CS for COM)
+        'STACK': {'start': segment_base + 0x200, 'end': segment_base + 0x2FF}  # Stack section
     }
     
     # Initialize with empty data

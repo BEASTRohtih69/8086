@@ -1,200 +1,170 @@
+#!/usr/bin/env python3
+"""
+8086 Simulator - Sample Program Runner
+This script loads and runs an assembly program file in the 8086 simulator,
+showing register and memory state before and after execution.
+"""
+
 import sys
-import argparse
+import os
 from cpu import CPU
 from memory import Memory
 from assembler import Assembler
 from instructions import InstructionSet
-import fix_instructions
 from profiler import create_profiler
+from fix_instructions import fix_segment_handling
 
-def run_program(filename, max_instructions=100, debug_mode=True, profile=False, dump_memory=True):
-    """
-    Run an 8086 assembly program with configurable options.
+def print_memory(memory, start, length, label):
+    """Print a section of memory in a hex dump format"""
+    print(f"\n--- {label} ---")
     
-    Args:
-        filename: Path to the assembly file
-        max_instructions: Maximum number of instructions to execute
-        debug_mode: Whether to print debug information
-        profile: Whether to collect and display performance metrics
-        dump_memory: Whether to dump memory contents after execution
+    # Calculate how many full rows of 16 bytes we'll print
+    rows = length // 16
+    if length % 16 > 0:
+        rows += 1
     
-    Returns:
-        A tuple containing (CPU, memory, instruction_count, profiler or None)
-    """
+    for row in range(rows):
+        row_addr = start + row * 16
+        # Print the address at the start of the row
+        print(f"{row_addr:04X}: ", end="")
+        
+        # Print the hex values
+        for col in range(16):
+            if row * 16 + col < length:
+                addr = start + row * 16 + col
+                value = memory.read_byte(addr)
+                print(f"{value:02X} ", end="")
+            else:
+                print("   ", end="")
+                
+        # Print printable ASCII characters
+        print(" |", end="")
+        for col in range(16):
+            if row * 16 + col < length:
+                addr = start + row * 16 + col
+                value = memory.read_byte(addr)
+                if 32 <= value <= 126:  # Printable ASCII range
+                    print(chr(value), end="")
+                else:
+                    print(".", end="")
+            else:
+                print(" ", end="")
+        print("|")
+
+def print_registers(cpu):
+    """Print the values of all CPU registers"""
+    print("\n--- Register State ---")
+    state = cpu.get_register_state()
+    for name, value in state.items():
+        print(f"{name}: {value:04X}", end="  ")
+        if name in ["AX", "BX", "CX", "DX"]:
+            # For general registers, show high and low bytes
+            high = cpu.get_register_high_byte(getattr(cpu, name))
+            low = cpu.get_register_low_byte(getattr(cpu, name))
+            print(f"({name[0]}H: {high:02X}, {name[0]}L: {low:02X})", end="")
+        print()
+
+    print("\n--- Flags ---")
+    flags = cpu.get_flag_state()
+    flag_list = []
+    for name, value in flags.items():
+        if value:
+            flag_list.append(name)
+    
+    print("Set flags: " + ", ".join(flag_list) if flag_list else "No flags set")
+
+def main():
+    """Main entry point for the simulator"""
+    if len(sys.argv) < 2:
+        print("Usage: python run_sample.py <program.asm> [max_instructions]")
+        sys.exit(1)
+    
+    filename = sys.argv[1]
+    
+    # Check if the file exists
+    if not os.path.exists(filename):
+        print(f"Error: File '{filename}' not found")
+        sys.exit(1)
+    
+    # Parse max_instructions if provided
+    max_instructions = None
+    if len(sys.argv) > 2:
+        try:
+            max_instructions = int(sys.argv[2])
+        except ValueError:
+            print(f"Error: Invalid number of instructions '{sys.argv[2]}'")
+            sys.exit(1)
+    
+    print(f"Running {filename} with 8086 simulator...")
+    
+    # Initialize components
     memory = Memory()
     cpu = CPU(memory)
+    instruction_set = InstructionSet(cpu)
+    cpu.instruction_set = instruction_set
     assembler = Assembler(cpu, memory)
-    instructions = InstructionSet(cpu)
     
-    # Create profiler if requested
+    # Try to use enhanced segment handling if available
+    try:
+        fix_segment_handling(assembler, filename)
+        print("Using enhanced segment handling")
+    except Exception as e:
+        # Fall back to basic handling
+        print(f"Using basic program loading (error with enhanced: {str(e)})")
+        try:
+            assembler.load_program(filename)
+        except Exception as e2:
+            print(f"Error loading program: {str(e2)}")
+            sys.exit(1)
+    
+    # Show initial state
+    print_registers(cpu)
+    
+    # Show memory sections
+    code_start = 0x100  # CODE segment physical address
+    code_size = 256
+    data_start = 0x200  # DATA segment physical address
+    data_size = 256
+    stack_start = 0x300  # STACK segment physical address
+    stack_size = 256
+    
+    print_memory(memory, code_start, code_size, "CODE Memory Before Execution")
+    print_memory(memory, data_start, data_size, "DATA Memory Before Execution")
+    
+    # Set up profiler if available
     profiler = None
-    if profile:
+    try:
         profiler = create_profiler(cpu, memory)
         cpu.set_profiler(profiler)
         memory.set_profiler(profiler)
         profiler.start_profiling()
-    
-    # Reset CPU and memory before loading
-    cpu.reset()
-    memory.reset()
-    
-    # Load the test program
-    if debug_mode:
-        print(f"Loading program: {filename}")
-    
-    labels, variables, segments = fix_instructions.fix_segment_handling(assembler, filename)
-    
-    # Debug information
-    if debug_mode:
-        print("\nDebug Information:")
-        print(f"Labels: {labels}")
-        print(f"Variables: {variables}")
-        print(f"Segments: {segments}")
-        print(f"CS: {cpu.get_register(cpu.CS):04X}")
-        print(f"IP: {cpu.get_register(cpu.IP):04X}")
-        
-        # Display memory at code segment start
-        code_start = segments['CODE']
-        print(f"\nCode Segment Memory (0x{code_start:04X}):")
-        for i in range(32):  # Show first 32 bytes of code segment
-            addr = code_start + i
-            byte = memory.read_byte(addr)
-            print(f"{addr:04X}: {byte:02X} {'(HLT)' if byte == 0xF4 else ''}")
-            
-        # Look for the HLT instruction in memory
-        found_hlt = False
-        for i in range(512):  # Search first 512 bytes
-            addr = code_start + i
-            byte = memory.read_byte(addr)
-            if byte == 0xF4:  # HLT opcode
-                print(f"\nFound HLT instruction at {addr:04X}")
-                found_hlt = True
-                print(f"Current IP: {cpu.get_register(cpu.IP):04X}")
-                break
-        
-        if not found_hlt:
-            print("\nCouldn't find HLT instruction in first 512 bytes of code segment.")
-        
-        # Show initial registers
-        print("Initial register state:")
-        for reg_index, reg_name in CPU.REGISTER_NAMES.items():
-            if reg_name != "FLAGS":
-                print(f"{reg_name}: {cpu.get_register(reg_index):04X}")
-    
-    # Execute the program step by step
-    if debug_mode:
-        print("\nExecuting program...")
-    
-    instruction_count = 0
-    
-    while instruction_count < max_instructions:
-        # Get the current instruction pointer
-        ip = cpu.get_register(cpu.IP)
-        cs = cpu.get_register(cpu.CS)
-        physical_addr = cpu.get_physical_address(cs, ip)
-        
-        # Get the instruction at the current address
-        opcode = memory.read_byte(physical_addr)
-        
-        if debug_mode:
-            print(f"IP={ip:04X}, CS={cs:04X}, Physical={physical_addr:05X}, Opcode={opcode:02X}")
-        
-        # Execute one instruction
-        if opcode == 0xF4:  # HLT
-            if debug_mode:
-                print("HLT instruction encountered. Stopping execution.")
-            break
-            
-        cpu.execute_instruction()
-        instruction_count += 1
-        
-        # Display registers after instruction
-        if debug_mode:
-            print("Register state after instruction:")
-            for reg_index, reg_name in CPU.REGISTER_NAMES.items():
-                if reg_name != "FLAGS":
-                    print(f"{reg_name}: {cpu.get_register(reg_index):04X}")
-            print()
-    
-    if debug_mode:
-        print(f"Executed {instruction_count} instructions.")
-        
-        # Display the final state
-        print("\nFinal register state:")
-        for reg_index, reg_name in CPU.REGISTER_NAMES.items():
-            if reg_name != "FLAGS":
-                print(f"{reg_name}: {cpu.get_register(reg_index):04X}")
-        
-        # Display flags
-        print("\nFlags:")
-        for flag_bit, flag_name in CPU.FLAG_NAMES.items():
-            print(f"{flag_name}: {cpu.get_flag(flag_bit)}")
-    
-    # Display data segment data
-    if dump_memory:
-        data_start = 0x0200  # Common data segment
-        data_length = 32  # Show 32 bytes
-        data = memory.dump(data_start, data_length)
-        
-        if debug_mode:
-            print("\nData segment contents:")
-            for i in range(0, len(data), 16):
-                line = data[i:i+16]
-                hex_values = ' '.join([f"{b:02X}" for b in line])
-                ascii_values = ''.join([chr(b) if 32 <= b <= 126 else '.' for b in line])
-                print(f"{data_start+i:04X}: {hex_values.ljust(48)} | {ascii_values}")
-    
-    # Stop profiling if enabled
-    if profile and profiler:
-        profiler.stop_profiling()
-        if debug_mode:
-            print("\nProfiling results:")
-            print(profiler.generate_summary_report())
-    
-    return cpu, memory, instruction_count, profiler
-
-def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Run an 8086 assembly program with various options.')
-    parser.add_argument('filename', nargs='?', default='sample_programs/sample.asm',
-                        help='Path to the assembly file to run')
-    parser.add_argument('-m', '--max-instructions', type=int, default=100,
-                        help='Maximum number of instructions to execute')
-    parser.add_argument('-d', '--debug', action='store_true',
-                        help='Print detailed debug information')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Run in quiet mode with minimal output')
-    parser.add_argument('-p', '--profile', action='store_true',
-                        help='Enable performance profiling')
-    parser.add_argument('--dump-memory', action='store_true',
-                        help='Dump memory contents after execution')
-    
-    args = parser.parse_args()
-    
-    # Determine debug mode
-    debug_mode = args.debug and not args.quiet
+        print("Performance profiling enabled")
+    except:
+        print("Performance profiling not available")
     
     # Run the program
-    cpu, memory, instruction_count, profiler = run_program(
-        args.filename,
-        max_instructions=args.max_instructions,
-        debug_mode=debug_mode,
-        profile=args.profile,
-        dump_memory=args.dump_memory
-    )
+    print("\n--- Executing Program ---")
+    instruction_count = cpu.run(max_instructions=max_instructions)
+    print(f"Executed {instruction_count} instructions")
+    if cpu.halted:
+        print("Program halted normally (HLT instruction)")
+    elif max_instructions and instruction_count >= max_instructions:
+        print(f"Reached maximum instructions limit ({max_instructions})")
+    else:
+        print("Program stopped due to an error")
     
-    # Print a summary if in quiet mode
-    if args.quiet:
-        print(f"Executed {instruction_count} instructions from {args.filename}")
-        print(f"Final AX: {cpu.get_register(cpu.AX):04X}, BX: {cpu.get_register(cpu.BX):04X}, "
-              f"CX: {cpu.get_register(cpu.CX):04X}, DX: {cpu.get_register(cpu.DX):04X}")
-        
-        # Show profiling summary if requested
-        if args.profile and profiler:
-            ips = profiler.get_instructions_per_second()
-            total_time = profiler.get_total_execution_time()
-            print(f"Execution time: {total_time:.6f} seconds")
-            print(f"Instructions per second: {ips:.2f}")
+    # Show final state
+    print_registers(cpu)
+    print_memory(memory, code_start, code_size, "CODE Memory After Execution")
+    print_memory(memory, data_start, data_size, "DATA Memory After Execution")
+    print_memory(memory, stack_start, stack_size, "STACK Memory After Execution")
+    
+    # Show profiler results if available
+    if profiler:
+        print("\n--- Profiler Results ---")
+        profiler.stop_profiling()
+        summary = profiler.generate_summary_report()
+        print(summary)
 
 if __name__ == "__main__":
     main()
