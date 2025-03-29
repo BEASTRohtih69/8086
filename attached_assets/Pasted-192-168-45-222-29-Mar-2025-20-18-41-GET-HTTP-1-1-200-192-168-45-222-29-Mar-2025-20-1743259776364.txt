@@ -1,0 +1,106 @@
+192.168.45.222 - - [29/Mar/2025 20:18:41] "GET / HTTP/1.1" 200 -
+192.168.45.222 - - [29/Mar/2025 20:18:44] "GET /favicon.ico HTTP/1.1" 404 -
+Segment positions: {'CODE': [0], 'DATA': [], 'STACK': []}
+
+Assembling CODE segment at 0100
+CODE: [0100] HLT
+Setting CS to 0010 (for physical address 0100)
+Setting DS to 0020 (for physical address 0200)
+Setting SS to 0030 (for physical address 0300)
+Defaulting to IP=0000 (beginning of CS segment)
+192.168.45.222 - - [29/Mar/2025 20:18:50] "POST /load_program HTTP/1.1" 302 -
+192.168.45.222 - - [29/Mar/2025 20:18:50] "GET / HTTP/1.1" 200 -
+Segment positions: {'CODE': [9], 'DATA': [6], 'STACK': [4]}
+
+Assembling DATA segment at 0200
+DATA: [0200] message DB 'Hello, World!$'
+
+Assembling CODE segment at 0100
+CODE: [0100] main PROC
+192.168.45.222 - - [29/Mar/2025 20:18:58] "POST /load_program HTTP/1.1" 302 -
+192.168.45.222 - - [29/Mar/2025 20:18:58] "GET / HTTP/1.1" 200 -
+Segment positions: {'CODE': [4], 'DATA': [], 'STACK': []}
+
+Assembling CODE segment at 0100
+CODE: [0100] MOV AX, 1
+CODE: [0103] MOV BX, 2
+CODE: [0106] MOV CX, 3
+CODE: [0109] MOV DX, 4
+CODE: [010C] ADD AX, BX
+CODE: [010E] ADD CX, DX
+CODE: [0110] ADD AX, CX
+CODE: [0112] MOV BX, 5
+CODE: [0115] MOV CX, 6
+CODE: [0118] ADD BX, CX
+CODE: [011A] ADD AX, BX
+CODE: [011C] MOV CX, 7
+CODE: [011F] MOV DX, 8
+CODE: [0122] ADD CX, DX
+CODE: [0124] ADD AX, CX
+CODE: [0126] MOV BX, 9
+CODE: [0129] MOV CX, 10
+CODE: [012C] ADD BX, CX
+CODE: [012E] ADD AX, BX
+CODE: [0130] HLT
+Setting CS to 0010 (for physical address 0100)
+Setting DS to 0020 (for physical address 0200)
+Setting SS to 0030 (for physical address 0300)
+Entry point MAIN not found in labels
+Defaulting to IP=0000 (beginning of CS segment)
+192.168.45.222 - - [29/Mar/2025 20:19:05] "POST /load_program HTTP/1.1" 302 -
+192.168.45.222 - - [29/Mar/2025 20:19:05] "GET / HTTP/1.1" 200 -
+Segment positions: {'CODE': [], 'DATA': [], 'STACK': []}
+
+Assembling CODE segment at 0100
+CODE: [0100] mov al,10h
+CODE: [0102] mov bl,20h
+CODE: [0104] add al,bl
+CODE: [0106] hlt
+Setting CS to 0010 (for physical address 0100)
+Setting DS to 0020 (for physical address 0200)
+Setting SS to 0030 (for physical address 0300)
+Entry point MAIN not found in labels
+Defaulting to IP=0000 (beginning of CS segment)
+192.168.45.222 - - [29/Mar/2025 20:19:14] "POST /load_program HTTP/1.1" 302 -
+192.168.45.222 - - [29/Mar/2025 20:19:14] "GET / HTTP/1.1" 500 -
+Traceback (most recent call last):
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 1514, in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rohit\Downloads\MicroprocessorSimulator (1)\MicroprocessorSimulator\app.py", line 68, in index
+    return render_template('index.html',
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\rohit\Downloads\MicroprocessorSimulator (1)\MicroprocessorSimulator\templates\index.html", line 244, in top-level template code
+    <span>{{ chr(code_memory[i + j]) }}</span>
+  File "C:\msys64\ucrt64\lib\python3.11\site-packages\jinja2\utils.py", line 92, in from_obj
+    if hasattr(obj, "jinja_pass_arg"):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.UndefinedError: 'chr' is undefined
+192.168.45.222 - - [29/Mar/2025 20:19:14] "GET /?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 304 -
+192.168.45.222 - - [29/Mar/2025 20:19:14] "GET /?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 304 -
+192.168.45.222 - - [29/Mar/2025 20:19:14] "GET /?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 304 -

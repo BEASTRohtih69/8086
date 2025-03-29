@@ -17,6 +17,9 @@ from fix_instructions import fix_segment_handling
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_secret_key")  # For flash messages and sessions
 
+# Add chr function to Jinja2 environment
+app.jinja_env.globals.update(chr=chr)
+
 # Initialize simulator components (these will be initialized per session later)
 memory = Memory()
 cpu = CPU(memory)
