@@ -55,13 +55,15 @@ class CPU:
         self.instruction_count = 0
         
         # Set segment registers to their default values
-        self.registers[self.CS] = 0xFFFF  # Code segment starts at 0xFFFF0
+        # Real 8086 would use 0xFFFF for CS to point to reset vector at 0xFFFF0
+        # But we'll use 0 for simplicity and to avoid memory range issues
+        self.registers[self.CS] = 0  # Code segment starts at 0
         self.registers[self.DS] = 0  # Data segment starts at 0
         self.registers[self.SS] = 0  # Stack segment starts at 0
         self.registers[self.ES] = 0  # Extra segment starts at 0
         
-        # Set IP to point to the reset vector
-        self.registers[self.IP] = 0  # IP starts at 0, so CS:IP = 0xFFFF:0000
+        # Set IP to point to the start of program
+        self.registers[self.IP] = 0  # IP starts at 0, so CS:IP = 0x0000:0000
         
         # Set SP to top of stack (64KB boundary)
         self.registers[self.SP] = 0xFFFE  # Initialize stack pointer
@@ -176,16 +178,85 @@ class CPU:
             # Further handling of ModR/M byte would go here
             # This is a simplified implementation
             pass
+        elif opcode == 0x8B:  # MOV r16, r/m16
+            modrm = self.fetch_byte()
+            # Get the register and r/m fields from the ModR/M byte
+            reg = (modrm >> 3) & 0x07
+            rm = modrm & 0x07
+            
+            if (modrm & 0xC0) == 0xC0:  # Register-to-register
+                value = self.registers[rm]
+                self.registers[reg] = value
+            else:
+                # Memory addressing modes would be handled here
+                pass
         elif opcode == 0x01:  # ADD r/m16, r16
             modrm = self.fetch_byte()
             # Further handling of ModR/M byte would go here
             pass
+        elif opcode == 0x03:  # ADD r16, r/m16
+            modrm = self.fetch_byte()
+            # Get the register and r/m fields from the ModR/M byte
+            reg = (modrm >> 3) & 0x07
+            rm = modrm & 0x07
+            
+            if (modrm & 0xC0) == 0xC0:  # Register-to-register
+                value = self.registers[rm]
+                self.registers[reg] = (self.registers[reg] + value) & 0xFFFF
+                # Update flags
+                # (in a real implementation, we would update the carry, zero, etc.)
+            else:
+                # Memory addressing modes would be handled here
+                pass
         elif opcode == 0xE8:  # CALL near
             offset = self.fetch_word()
             self.push(self.registers[self.IP])
             self.registers[self.IP] = (self.registers[self.IP] + offset) & 0xFFFF
         elif opcode == 0xC3:  # RET
             self.registers[self.IP] = self.pop()
+        elif opcode == 0xCD:  # INT imm8
+            interrupt_num = self.fetch_byte()
+            
+            # Handle DOS interrupts (INT 21h)
+            if interrupt_num == 0x21:
+                # Get function number from AH
+                function = self.get_register_high_byte(self.AX)
+                
+                # DOS function 9: Print string
+                if function == 0x09:
+                    # DX contains the offset of the string
+                    offset = self.get_register(self.DX)
+                    
+                    # Read string from memory until $ terminator
+                    string = ""
+                    address = self.get_physical_address(self.get_register(self.DS), offset)
+                    
+                    while True:
+                        char = self.memory.read_byte(address)
+                        if char == 0x24:  # '$' character
+                            break
+                        string += chr(char)
+                        address += 1
+                    
+                    # Print the string
+                    print(string)
+                
+                # DOS function 4C: Exit
+                elif function == 0x4C:
+                    # AL contains the return code
+                    return_code = self.get_register_low_byte(self.AX)
+                    print(f"Program exited with code {return_code}")
+                    self.halted = True
+                    return False
+                
+                # Other DOS functions would be implemented here
+                else:
+                    print(f"Unimplemented DOS function: 0x{function:02X}")
+            
+            # Other interrupts would be handled here
+            else:
+                print(f"Unimplemented interrupt: 0x{interrupt_num:02X}")
+                
         else:
             print(f"Unimplemented opcode: 0x{opcode:02X}")
             return False

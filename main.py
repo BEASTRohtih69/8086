@@ -13,6 +13,13 @@ from assembler import Assembler
 from debugger import Debugger
 from ui import UI
 
+# Import the GUI module
+try:
+    from gui import start_gui
+    GUI_AVAILABLE = True
+except ImportError:
+    GUI_AVAILABLE = False
+
 
 def main():
     """Main entry point for the 8086 simulator"""
@@ -23,6 +30,10 @@ def main():
                         help='Memory size in bytes (default: 64KB)')
     parser.add_argument('-i', '--interactive', action='store_true', 
                         help='Start in interactive mode even with a program loaded')
+    parser.add_argument('-g', '--gui', action='store_true',
+                       help='Start with graphical user interface (if available)')
+    parser.add_argument('-t', '--text', action='store_true',
+                       help='Force text mode (no GUI)')
     
     args = parser.parse_args()
     
@@ -42,14 +53,22 @@ def main():
             print(f"Error loading program: {e}")
             sys.exit(1)
     
-    # If debug mode is requested or interactive mode
-    if args.debug or args.interactive or not args.program:
-        ui.show_welcome()
-        debugger.interactive_mode()
+    # Check if we should use the GUI
+    use_gui = args.gui or (GUI_AVAILABLE and not args.text)
+    
+    if use_gui and GUI_AVAILABLE:
+        # Launch the graphical interface
+        from gui import start_gui
+        start_gui(cpu, memory, assembler, debugger)
     else:
-        # Run the program normally
-        ui.show_welcome()
-        ui.run_simulation(cpu)
+        # Use the text-based interface
+        if args.debug or args.interactive or not args.program:
+            ui.show_welcome()
+            debugger.interactive_mode()
+        else:
+            # Run the program normally
+            ui.show_welcome()
+            ui.run_simulation(cpu)
     
     print("Simulator exited.")
 

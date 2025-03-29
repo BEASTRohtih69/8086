@@ -110,21 +110,292 @@ class InstructionSet:
             return (f"Unknown opcode: 0x{opcode:02X}", None)
     
     # Instruction implementations
+    def _decode_modrm(self, modrm_byte):
+        """Decode a ModR/M byte into its components."""
+        mod = (modrm_byte >> 6) & 0x03
+        reg = (modrm_byte >> 3) & 0x07
+        rm = modrm_byte & 0x07
+        return mod, reg, rm
+        
+    def _get_effective_address(self, mod, rm):
+        """Calculate the effective address for memory operands."""
+        if mod == 0:
+            if rm == 0:  # [BX + SI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.SI)) & 0xFFFF
+                )
+            elif rm == 1:  # [BX + DI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.DI)) & 0xFFFF
+                )
+            elif rm == 2:  # [BP + SI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.SI)) & 0xFFFF
+                )
+            elif rm == 3:  # [BP + DI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.DI)) & 0xFFFF
+                )
+            elif rm == 4:  # [SI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    self.cpu.get_register(self.cpu.SI)
+                )
+            elif rm == 5:  # [DI]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    self.cpu.get_register(self.cpu.DI)
+                )
+            elif rm == 6:  # Direct address
+                disp_low = self.cpu.fetch_byte()
+                disp_high = self.cpu.fetch_byte()
+                disp = (disp_high << 8) | disp_low
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    disp
+                )
+            elif rm == 7:  # [BX]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    self.cpu.get_register(self.cpu.BX)
+                )
+        elif mod == 1:
+            # 8-bit displacement
+            disp = self.cpu.fetch_byte()
+            if disp & 0x80:  # Sign extend
+                disp = disp - 256
+                
+            if rm == 0:  # [BX + SI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 1:  # [BX + DI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 2:  # [BP + SI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 3:  # [BP + DI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 4:  # [SI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 5:  # [DI + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 6:  # [BP + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + disp) & 0xFFFF
+                )
+            elif rm == 7:  # [BX + disp8]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + disp) & 0xFFFF
+                )
+        elif mod == 2:
+            # 16-bit displacement
+            disp_low = self.cpu.fetch_byte()
+            disp_high = self.cpu.fetch_byte()
+            disp = (disp_high << 8) | disp_low
+            
+            if rm == 0:  # [BX + SI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 1:  # [BX + DI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 2:  # [BP + SI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 3:  # [BP + DI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 4:  # [SI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.SI) + disp) & 0xFFFF
+                )
+            elif rm == 5:  # [DI + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.DI) + disp) & 0xFFFF
+                )
+            elif rm == 6:  # [BP + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.SS),
+                    (self.cpu.get_register(self.cpu.BP) + disp) & 0xFFFF
+                )
+            elif rm == 7:  # [BX + disp16]
+                return self.cpu.get_physical_address(
+                    self.cpu.get_register(self.cpu.DS),
+                    (self.cpu.get_register(self.cpu.BX) + disp) & 0xFFFF
+                )
+        
+        # Should not reach here
+        raise ValueError(f"Invalid ModR/M combination: mod={mod}, rm={rm}")
+    
+    def _get_register_by_index(self, reg_index, is_byte=False):
+        """Get register value by index from ModR/M byte."""
+        if is_byte:
+            # 8-bit registers
+            if reg_index == 0:  # AL
+                return self.cpu.get_register_low_byte(self.cpu.AX)
+            elif reg_index == 1:  # CL
+                return self.cpu.get_register_low_byte(self.cpu.CX)
+            elif reg_index == 2:  # DL
+                return self.cpu.get_register_low_byte(self.cpu.DX)
+            elif reg_index == 3:  # BL
+                return self.cpu.get_register_low_byte(self.cpu.BX)
+            elif reg_index == 4:  # AH
+                return self.cpu.get_register_high_byte(self.cpu.AX)
+            elif reg_index == 5:  # CH
+                return self.cpu.get_register_high_byte(self.cpu.CX)
+            elif reg_index == 6:  # DH
+                return self.cpu.get_register_high_byte(self.cpu.DX)
+            elif reg_index == 7:  # BH
+                return self.cpu.get_register_high_byte(self.cpu.BX)
+        else:
+            # 16-bit registers
+            if reg_index == 0:  # AX
+                return self.cpu.get_register(self.cpu.AX)
+            elif reg_index == 1:  # CX
+                return self.cpu.get_register(self.cpu.CX)
+            elif reg_index == 2:  # DX
+                return self.cpu.get_register(self.cpu.DX)
+            elif reg_index == 3:  # BX
+                return self.cpu.get_register(self.cpu.BX)
+            elif reg_index == 4:  # SP
+                return self.cpu.get_register(self.cpu.SP)
+            elif reg_index == 5:  # BP
+                return self.cpu.get_register(self.cpu.BP)
+            elif reg_index == 6:  # SI
+                return self.cpu.get_register(self.cpu.SI)
+            elif reg_index == 7:  # DI
+                return self.cpu.get_register(self.cpu.DI)
+        # Default fallback
+        return 0
+    
+    def _set_register_by_index(self, reg_index, value, is_byte=False):
+        """Set register by index from ModR/M byte."""
+        if is_byte:
+            # 8-bit registers
+            if reg_index == 0:  # AL
+                self.cpu.set_register_low_byte(self.cpu.AX, value)
+            elif reg_index == 1:  # CL
+                self.cpu.set_register_low_byte(self.cpu.CX, value)
+            elif reg_index == 2:  # DL
+                self.cpu.set_register_low_byte(self.cpu.DX, value)
+            elif reg_index == 3:  # BL
+                self.cpu.set_register_low_byte(self.cpu.BX, value)
+            elif reg_index == 4:  # AH
+                self.cpu.set_register_high_byte(self.cpu.AX, value)
+            elif reg_index == 5:  # CH
+                self.cpu.set_register_high_byte(self.cpu.CX, value)
+            elif reg_index == 6:  # DH
+                self.cpu.set_register_high_byte(self.cpu.DX, value)
+            elif reg_index == 7:  # BH
+                self.cpu.set_register_high_byte(self.cpu.BX, value)
+        else:
+            # 16-bit registers
+            if reg_index == 0:  # AX
+                self.cpu.set_register(self.cpu.AX, value)
+            elif reg_index == 1:  # CX
+                self.cpu.set_register(self.cpu.CX, value)
+            elif reg_index == 2:  # DX
+                self.cpu.set_register(self.cpu.DX, value)
+            elif reg_index == 3:  # BX
+                self.cpu.set_register(self.cpu.BX, value)
+            elif reg_index == 4:  # SP
+                self.cpu.set_register(self.cpu.SP, value)
+            elif reg_index == 5:  # BP
+                self.cpu.set_register(self.cpu.BP, value)
+            elif reg_index == 6:  # SI
+                self.cpu.set_register(self.cpu.SI, value)
+            elif reg_index == 7:  # DI
+                self.cpu.set_register(self.cpu.DI, value)
+    
     def _mov_rm8_r8(self, modrm):
-        # Implementation for MOV r/m8, r8
-        pass
+        """Implementation for MOV r/m8, r8 (88)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the source register
+        reg_value = self._get_register_by_index(reg, is_byte=True)
+        
+        if mod == 3:
+            # Register to register
+            self._set_register_by_index(rm, reg_value, is_byte=True)
+        else:
+            # Register to memory
+            effective_addr = self._get_effective_address(mod, rm)
+            self.cpu.memory.write_byte(effective_addr, reg_value)
     
     def _mov_rm16_r16(self, modrm):
-        # Implementation for MOV r/m16, r16
-        pass
+        """Implementation for MOV r/m16, r16 (89)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the source register
+        reg_value = self._get_register_by_index(reg, is_byte=False)
+        
+        if mod == 3:
+            # Register to register
+            self._set_register_by_index(rm, reg_value, is_byte=False)
+        else:
+            # Register to memory
+            effective_addr = self._get_effective_address(mod, rm)
+            self.cpu.memory.write_word(effective_addr, reg_value)
     
     def _mov_r8_rm8(self, modrm):
-        # Implementation for MOV r8, r/m8
-        pass
+        """Implementation for MOV r8, r/m8 (8A)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=True)
+            self._set_register_by_index(reg, rm_value, is_byte=True)
+        else:
+            # Memory to register
+            effective_addr = self._get_effective_address(mod, rm)
+            value = self.cpu.memory.read_byte(effective_addr)
+            self._set_register_by_index(reg, value, is_byte=True)
     
     def _mov_r16_rm16(self, modrm):
-        # Implementation for MOV r16, r/m16
-        pass
+        """Implementation for MOV r16, r/m16 (8B)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=False)
+            self._set_register_by_index(reg, rm_value, is_byte=False)
+        else:
+            # Memory to register
+            effective_addr = self._get_effective_address(mod, rm)
+            value = self.cpu.memory.read_word(effective_addr)
+            self._set_register_by_index(reg, value, is_byte=False)
     
     def _mov_al_imm8(self):
         value = self.cpu.fetch_byte()
@@ -190,28 +461,99 @@ class InstructionSet:
         value = self.cpu.fetch_word()
         self.cpu.set_register(self.cpu.DI, value)
     
+
+    
     def _add_rm8_r8(self, modrm):
-        # Implementation for ADD r/m8, r8
-        pass
+        """Implementation for ADD r/m8, r8 (00)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the source register
+        reg_value = self._get_register_by_index(reg, is_byte=True)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=True)
+            result = (rm_value + reg_value) & 0xFF
+            self._set_register_by_index(rm, result, is_byte=True)
+            self._update_flags_after_arithmetic(rm_value, reg_value, result, 8)
+        else:
+            # Memory and register
+            effective_addr = self._get_effective_address(mod, rm)
+            memory_value = self.cpu.memory.read_byte(effective_addr)
+            result = (memory_value + reg_value) & 0xFF
+            self.cpu.memory.write_byte(effective_addr, result)
+            self._update_flags_after_arithmetic(memory_value, reg_value, result, 8)
     
     def _add_rm16_r16(self, modrm):
-        # Implementation for ADD r/m16, r16
-        pass
+        """Implementation for ADD r/m16, r16 (01)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the source register
+        reg_value = self._get_register_by_index(reg, is_byte=False)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=False)
+            result = (rm_value + reg_value) & 0xFFFF
+            self._set_register_by_index(rm, result, is_byte=False)
+            self._update_flags_after_arithmetic(rm_value, reg_value, result, 16)
+        else:
+            # Memory and register
+            effective_addr = self._get_effective_address(mod, rm)
+            memory_value = self.cpu.memory.read_word(effective_addr)
+            result = (memory_value + reg_value) & 0xFFFF
+            self.cpu.memory.write_word(effective_addr, result)
+            self._update_flags_after_arithmetic(memory_value, reg_value, result, 16)
     
     def _add_r8_rm8(self, modrm):
-        # Implementation for ADD r8, r/m8
-        pass
+        """Implementation for ADD r8, r/m8 (02)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the destination register
+        reg_value = self._get_register_by_index(reg, is_byte=True)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=True)
+            result = (reg_value + rm_value) & 0xFF
+            self._set_register_by_index(reg, result, is_byte=True)
+            self._update_flags_after_arithmetic(reg_value, rm_value, result, 8)
+        else:
+            # Memory and register
+            effective_addr = self._get_effective_address(mod, rm)
+            memory_value = self.cpu.memory.read_byte(effective_addr)
+            result = (reg_value + memory_value) & 0xFF
+            self._set_register_by_index(reg, result, is_byte=True)
+            self._update_flags_after_arithmetic(reg_value, memory_value, result, 8)
     
     def _add_r16_rm16(self, modrm):
-        # Implementation for ADD r16, r/m16
-        pass
+        """Implementation for ADD r16, r/m16 (03)"""
+        mod, reg, rm = self._decode_modrm(modrm)
+        
+        # Get the value from the destination register
+        reg_value = self._get_register_by_index(reg, is_byte=False)
+        
+        if mod == 3:
+            # Register to register
+            rm_value = self._get_register_by_index(rm, is_byte=False)
+            result = (reg_value + rm_value) & 0xFFFF
+            self._set_register_by_index(reg, result, is_byte=False)
+            self._update_flags_after_arithmetic(reg_value, rm_value, result, 16)
+        else:
+            # Memory and register
+            effective_addr = self._get_effective_address(mod, rm)
+            memory_value = self.cpu.memory.read_word(effective_addr)
+            result = (reg_value + memory_value) & 0xFFFF
+            self._set_register_by_index(reg, result, is_byte=False)
+            self._update_flags_after_arithmetic(reg_value, memory_value, result, 16)
     
     def _add_al_imm8(self):
+        """Implementation for ADD AL, imm8 (04)"""
         value = self.cpu.fetch_byte()
-        result = (self.cpu.get_register_low_byte(self.cpu.AX) + value) & 0xFF
+        al = self.cpu.get_register_low_byte(self.cpu.AX)
+        result = (al + value) & 0xFF
         self.cpu.set_register_low_byte(self.cpu.AX, result)
-        # Set flags
-        self._update_flags_after_arithmetic(self.cpu.get_register_low_byte(self.cpu.AX), value, result, 8)
+        self._update_flags_after_arithmetic(al, value, result, 8)
     
     def _add_ax_imm16(self):
         value = self.cpu.fetch_word()

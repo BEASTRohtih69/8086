@@ -17,6 +17,26 @@ class Assembler:
         self.current_address = 0
         self.segment_prefix = None  # Current segment override prefix
         
+        # Segment addresses (for .MODEL, .DATA, .CODE directives)
+        self.segments = {
+            'CODE': 0x0000,  # Default code segment
+            'DATA': 0x0000,  # Default data segment
+            'STACK': 0x0000  # Default stack segment
+        }
+        
+        self.current_segment = 'CODE'  # Default to code segment
+        self.variables = {}  # Variable to address mapping (for .DATA section)
+        
+        # Model sizes (memory models in MASM)
+        self.memory_models = {
+            'TINY': {'CODE': 0x0100, 'DATA': 0x0100, 'STACK': 0x0100},
+            'SMALL': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
+            'MEDIUM': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
+            'COMPACT': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
+            'LARGE': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000},
+            'HUGE': {'CODE': 0x0000, 'DATA': 0x0000, 'STACK': 0x0000}
+        }
+        
         # Initialize opcode table
         self._init_opcode_table()
     
@@ -108,14 +128,29 @@ class Assembler:
         """Load an assembly program from a file into memory."""
         # Reset state
         self.labels = {}
+        self.variables = {}
         self.current_address = 0
         self.segment_prefix = None
+        self.current_segment = 'CODE'
         
-        # First pass: gather labels
+        # Reset segments to defaults
+        self.segments = {
+            'CODE': 0x0000,
+            'DATA': 0x0000,
+            'STACK': 0x0000
+        }
+        
+        # First pass: process directives and gather labels
         with open(filename, 'r') as f:
             lines = f.readlines()
         
-        cleaned_lines = []
+        # Pre-processing to handle directives and gather symbols
+        in_data_segment = False
+        in_code_segment = True
+        proc_active = None
+        
+        processed_lines = []
+        
         for line in lines:
             # Remove comments
             comment_pos = line.find(';')
@@ -127,7 +162,89 @@ class Assembler:
             if not line:
                 continue
             
-            # Check for labels
+            parts = line.split()
+            mnemonic = parts[0].upper()
+            
+            # Handle memory model directive
+            if mnemonic == '.MODEL':
+                model = parts[1].upper() if len(parts) > 1 else 'SMALL'
+                if model in self.memory_models:
+                    for segment, address in self.memory_models[model].items():
+                        self.segments[segment] = address
+                continue
+            
+            # Handle segment directives
+            if mnemonic == '.STACK':
+                in_data_segment = False
+                in_code_segment = False
+                self.current_segment = 'STACK'
+                # Set SS register
+                self.cpu.set_register(self.cpu.SS, self.segments['STACK'])
+                if len(parts) > 1:
+                    stack_size = self._parse_value(parts[1])
+                    self.cpu.set_register(self.cpu.SP, stack_size)
+                continue
+            
+            if mnemonic == '.DATA':
+                in_data_segment = True
+                in_code_segment = False
+                self.current_segment = 'DATA'
+                # Set current address to data segment
+                self.current_address = self.segments['DATA']
+                continue
+            
+            if mnemonic == '.CODE':
+                in_data_segment = False
+                in_code_segment = True
+                self.current_segment = 'CODE'
+                # Set current address to code segment
+                self.current_address = self.segments['CODE']
+                continue
+            
+            # Handle procedure directives
+            if mnemonic == 'PROC':
+                proc_active = parts[1] if len(parts) > 1 else None
+                self.labels[proc_active] = self.current_address
+                continue
+            
+            if mnemonic == 'ENDP':
+                proc_active = None
+                continue
+            
+            if mnemonic == 'END':
+                # End of program, can set entry point if specified
+                if len(parts) > 1:
+                    entry_point = parts[1]
+                    if entry_point in self.labels:
+                        self.cpu.set_register(self.cpu.IP, self.labels[entry_point])
+                continue
+            
+            # Handle variable definitions in data segment
+            if in_data_segment and ' DB ' in line.upper():
+                var_parts = line.split(' DB ', 1)
+                var_name = var_parts[0].strip()
+                self.variables[var_name] = self.current_address
+                # We'll process the actual data in the second pass
+                processed_lines.append(line)
+                # Estimate size (rough estimate for now)
+                data_value = var_parts[1].strip()
+                if (data_value.startswith("'") and data_value.endswith("'")) or \
+                   (data_value.startswith('"') and data_value.endswith('"')):
+                    size = len(data_value) - 2  # Subtract quotes
+                else:
+                    # Comma-separated values
+                    size = len(data_value.split(','))
+                self.current_address += size
+                continue
+            
+            # Check for procedures with format "label PROC"
+            if ' PROC' in line.upper():
+                parts = line.upper().split(' PROC')
+                proc_name = parts[0].strip()
+                self.labels[proc_name] = self.current_address
+                continue
+                
+            # Check for regular labels with colon
             if ':' in line:
                 label, _, rest = line.partition(':')
                 label = label.strip()
@@ -136,21 +253,52 @@ class Assembler:
                 if not line:
                     continue
             
-            cleaned_lines.append(line)
+            # Add to processed lines for second pass
+            processed_lines.append(line)
             
-            # Calculate instruction size
+            # Calculate instruction size for address tracking
             size = self._get_instruction_size(line)
             self.current_address += size
         
-        # Reset address for second pass
+        # Reset for second pass
         self.current_address = 0
+        self.current_segment = 'CODE'
+        in_data_segment = False
+        in_code_segment = True
         
         # Second pass: assemble instructions
-        for line in cleaned_lines:
+        for line in processed_lines:
+            parts = line.split()
+            mnemonic = parts[0].upper()
+            
+            # Skip to the appropriate segment
+            if mnemonic == '.DATA':
+                in_data_segment = True
+                in_code_segment = False
+                self.current_segment = 'DATA'
+                self.current_address = self.segments['DATA']
+                continue
+            
+            if mnemonic == '.CODE':
+                in_data_segment = False
+                in_code_segment = True
+                self.current_segment = 'CODE'
+                self.current_address = self.segments['CODE']
+                continue
+            
+            # Now assemble the instruction or process the directive
             self._assemble_instruction(line)
         
-        # Reset IP to start of program
-        self.cpu.set_register(self.cpu.IP, 0)
+        # Make sure IP points to code segment (entry point)
+        if 'main' in self.labels:
+            self.cpu.set_register(self.cpu.IP, self.labels['main'])
+        else:
+            self.cpu.set_register(self.cpu.IP, 0)
+        
+        # Set CS to code segment
+        self.cpu.set_register(self.cpu.CS, self.segments['CODE'])
+        # Set DS to data segment
+        self.cpu.set_register(self.cpu.DS, self.segments['DATA'])
     
     def _get_instruction_size(self, line):
         """Estimate the size of an instruction in bytes."""
@@ -185,20 +333,153 @@ class Assembler:
         parts = line.split()
         mnemonic = parts[0].upper()
         
-        # Handle directives
+        # Handle memory model directives
+        if mnemonic == '.MODEL':
+            if len(parts) > 1:
+                model = parts[1].upper()
+                if model in self.memory_models:
+                    # Set the segment addresses based on the memory model
+                    for segment, address in self.memory_models[model].items():
+                        self.segments[segment] = address
+            return
+        
+        # Handle segment directives
+        if mnemonic == '.STACK':
+            self.current_segment = 'STACK'
+            # Set stack size if specified
+            if len(parts) > 1:
+                stack_size = self._parse_value(parts[1])
+                # Set SS and SP registers
+                self.cpu.set_register(self.cpu.SS, self.segments['STACK'])
+                self.cpu.set_register(self.cpu.SP, stack_size)
+            return
+        
+        if mnemonic == '.DATA':
+            self.current_segment = 'DATA'
+            # Set DS register to data segment address
+            self.cpu.set_register(self.cpu.DS, self.segments['DATA'])
+            # Reset current address to start of data segment
+            self.current_address = self.segments['DATA']
+            return
+        
+        if mnemonic == '.CODE':
+            self.current_segment = 'CODE'
+            # Set CS register to code segment address
+            self.cpu.set_register(self.cpu.CS, self.segments['CODE'])
+            # Reset current address to start of code segment
+            self.current_address = self.segments['CODE']
+            return
+        
+        # Handle procedure directives
+        if mnemonic == 'PROC':
+            # Save the procedure name
+            if len(parts) > 1:
+                proc_name = parts[1].upper()
+                self.labels[proc_name] = self.current_address
+            return
+        
+        if mnemonic == 'ENDP':
+            # End of procedure
+            return
+        
+        if mnemonic == 'END':
+            # End of program
+            return
+        
+        # Handle variable/label definition with DB (Define Byte)
+        if len(parts) >= 3 and parts[1].upper() == 'DB':
+            var_name = parts[0]
+            # Save variable address
+            self.variables[var_name] = self.current_address
+            
+            # Process the data
+            rest = ' '.join(parts[2:])
+            # Check if it's a string in quotes
+            if (rest.startswith("'") and rest.endswith("'")) or (rest.startswith('"') and rest.endswith('"')):
+                # String literal
+                string_value = rest[1:-1]
+                for char in string_value:
+                    self.memory.write_byte(self.current_address, ord(char))
+                    self.current_address += 1
+            else:
+                # Byte values separated by commas
+                for value_str in rest.split(','):
+                    value = self._parse_value(value_str.strip())
+                    self.memory.write_byte(self.current_address, value & 0xFF)
+                    self.current_address += 1
+            return
+        
+        # Handle data definition directives
+        if mnemonic == 'DB':
+            # Define byte
+            if len(parts) > 1:
+                rest = ' '.join(parts[1:])
+                # Check if it's a string in quotes
+                if (rest.startswith("'") and rest.endswith("'")) or (rest.startswith('"') and rest.endswith('"')):
+                    # String literal
+                    string_value = rest[1:-1]
+                    for char in string_value:
+                        self.memory.write_byte(self.current_address, ord(char))
+                        self.current_address += 1
+                else:
+                    # Byte values separated by commas
+                    for value_str in rest.split(','):
+                        value = self._parse_value(value_str.strip())
+                        self.memory.write_byte(self.current_address, value & 0xFF)
+                        self.current_address += 1
+            return
+        
+        # Handle ORG directive (set current address)
         if mnemonic in ['.ORG', 'ORG']:
             address = self._parse_value(parts[1])
             self.current_address = address
             return
         
-        # Parse operands if any
-        operands = []
+        # Special handling for OFFSET operator
+        parsed_operands = []
         if len(parts) > 1:
-            operands_str = parts[1]
-            operands = [op.strip() for op in operands_str.split(',')]
+            operands_str = ' '.join(parts[1:])
+            # Split on commas, but respect parentheses and quotes
+            operands = []
+            current = ""
+            in_quotes = False
+            paren_level = 0
+            
+            for char in operands_str:
+                if char == ',' and not in_quotes and paren_level == 0:
+                    operands.append(current.strip())
+                    current = ""
+                else:
+                    if char == '"' or char == "'":
+                        in_quotes = not in_quotes
+                    elif char == '(' or char == '[':
+                        paren_level += 1
+                    elif char == ')' or char == ']':
+                        paren_level -= 1
+                    current += char
+            
+            if current:
+                operands.append(current.strip())
+            
+            # Process each operand
+            for operand in operands:
+                # Handle OFFSET operator
+                if 'OFFSET' in operand.upper():
+                    label = operand.upper().replace('OFFSET', '').strip()
+                    if label in self.labels:
+                        parsed_operands.append(str(self.labels[label]))
+                    else:
+                        raise ValueError(f"Unknown label for OFFSET: {label}")
+                # Handle @DATA pseudo-register
+                elif '@DATA' in operand.upper():
+                    # In a real assembler, @DATA would be the segment address of the data segment
+                    # For simplicity, we'll use the default DS value (0)
+                    parsed_operands.append('0')
+                else:
+                    parsed_operands.append(operand)
         
         # Encode the instruction
-        machine_code = self._encode_instruction(mnemonic, operands)
+        machine_code = self._encode_instruction(mnemonic, parsed_operands)
         
         # Write machine code to memory
         for byte in machine_code:
@@ -378,9 +659,19 @@ class Assembler:
         
         value_str = value_str.strip()
         
-        # Hexadecimal
+        # Hexadecimal with 0x prefix
         if value_str.startswith(('0x', '0X')):
             return int(value_str[2:], 16)
+        
+        # Hexadecimal with h suffix (common in assembly)
+        if value_str.endswith(('h', 'H')):
+            # Remove suffix and parse as hex
+            hex_value = value_str[:-1]
+            # Make sure it's a valid hex number
+            try:
+                return int(hex_value, 16)
+            except ValueError:
+                raise ValueError(f"Invalid hexadecimal value: {value_str}")
         
         # Binary
         if value_str.startswith(('0b', '0B')):
@@ -396,4 +687,13 @@ class Assembler:
         except ValueError:
             if value_str in self.labels:
                 return self.labels[value_str]
-            raise ValueError(f"Invalid numeric value: {value_str}")
+            
+            # Last resort - check if it could be a hex value with no prefix
+            # This is a common convention in some assemblers
+            try:
+                if all(c in '0123456789ABCDEFabcdef' for c in value_str):
+                    return int(value_str, 16)
+                else:
+                    raise ValueError
+            except ValueError:
+                raise ValueError(f"Invalid numeric value: {value_str}")
