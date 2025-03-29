@@ -1153,35 +1153,27 @@ class InstructionSet:
         if offset & 0x80:
             offset = offset - 256
         
-        print(f"DEBUG - LOOP execution: original offset = {offset}")
-        
         # Decrement CX
         cx_value = self.cpu.get_register(self.cpu.CX)
         cx_value = (cx_value - 1) & 0xFFFF
         self.cpu.set_register(self.cpu.CX, cx_value)
         
-        print(f"DEBUG - LOOP execution: CX = {cx_value}")
-        
         # Jump if CX != 0
         if cx_value != 0:
-            # Fix for the LOOP instruction:
-            # The label addresses appear to be off by 2 bytes
-            # We need to adjust for the fact that the loop_start label
-            # is at 0x0104 while the INC AX instruction is at 0x0106
+            # In the LOOP instruction, the offset is relative to the next instruction
+            # after the LOOP instruction. Since we've already fetched the opcode (1 byte)
+            # and the offset (1 byte), the IP is already pointing 2 bytes ahead.
             
-            # Original IP calculation
+            # The actual calculation is:
+            # new_ip = ip + offset
+            # Where ip is the address of the next instruction after the LOOP
             ip = self.cpu.get_register(self.cpu.IP)
+            new_ip = (ip + offset) & 0xFFFF
             
-            # We need to jump directly to loop_start (0x0104) which has INC AX
-            # Since our offset calculation shows -5, we need to add 2 to make it -3
-            # This will get us to the right address
-            corrected_offset = offset
-            new_ip = (ip + corrected_offset) & 0xFFFF
-            
-            print(f"DEBUG - LOOP jumping: from IP = {ip:04X} to IP = {new_ip:04X} (offset = {corrected_offset})")
             self.cpu.set_register(self.cpu.IP, new_ip)
-        else:
-            print(f"DEBUG - LOOP not jumping (CX = 0)")
+        
+        # Return success
+        return True
     
     def _loope_rel8(self):
         """LOOPE/LOOPZ instruction: decrement CX and jump if CX != 0 and ZF=1."""
@@ -1200,7 +1192,11 @@ class InstructionSet:
         # Jump if CX != 0 and ZF=1
         if cx_value != 0 and self.cpu.get_flag(self.cpu.ZERO_FLAG):
             ip = self.cpu.get_register(self.cpu.IP)
-            self.cpu.set_register(self.cpu.IP, (ip + offset) & 0xFFFF)
+            new_ip = (ip + offset) & 0xFFFF
+            self.cpu.set_register(self.cpu.IP, new_ip)
+        
+        # Return success
+        return True
     
     def _loopne_rel8(self):
         """LOOPNE/LOOPNZ instruction: decrement CX and jump if CX != 0 and ZF=0."""
@@ -1219,4 +1215,8 @@ class InstructionSet:
         # Jump if CX != 0 and ZF=0
         if cx_value != 0 and not self.cpu.get_flag(self.cpu.ZERO_FLAG):
             ip = self.cpu.get_register(self.cpu.IP)
-            self.cpu.set_register(self.cpu.IP, (ip + offset) & 0xFFFF)
+            new_ip = (ip + offset) & 0xFFFF
+            self.cpu.set_register(self.cpu.IP, new_ip)
+        
+        # Return success
+        return True

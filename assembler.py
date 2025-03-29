@@ -548,7 +548,14 @@ class Assembler:
     
     def _assemble_instruction(self, line):
         """Assemble a single instruction into memory."""
+        # Strip any comments from the line
+        if ';' in line:
+            line = line.split(';', 1)[0].strip()
+            
         parts = line.split()
+        if not parts:
+            return  # Empty line after removing comments
+            
         mnemonic = parts[0].upper()
         
         # Handle memory model directives
@@ -1006,57 +1013,60 @@ class Assembler:
                 machine_code.append(opcode)
                 
                 # Calculate relative offset for LOOP
+                target_address = None
+                
+                # Check for the label in different case formats
                 if target in self.labels:
                     target_address = self.labels[target]
+                elif target.lower() in self.labels:
+                    target_address = self.labels[target.lower()]
+                elif target.upper() in self.labels:
+                    target_address = self.labels[target.upper()]
+                    
+                if target_address is not None:
                     # The loop offset is relative to the next instruction
                     # which is 2 bytes after the current address (opcode + offset)
                     offset = target_address - (self.current_address + 2)
                     if not -128 <= offset <= 127:
                         raise ValueError(f"Loop target out of range for short jump: {offset}")
+                    
                     machine_code.append(offset & 0xFF)
-                    print(f"DEBUG - LOOP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
                     
-                    # Debugging all labels
-                    print(f"DEBUG - All labels: {self.labels}")
+                    # Print debug info
+                    print(f"LOOP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
                 else:
-                    # Try different cases of the label
-                    target_lower = target.lower()
-                    target_upper = target.upper()
-                    
-                    if target_lower in self.labels:
-                        target_address = self.labels[target_lower]
-                        offset = target_address - (self.current_address + 2)
-                        if not -128 <= offset <= 127:
-                            raise ValueError(f"Loop target out of range for short jump: {offset}")
-                        machine_code.append(offset & 0xFF)
-                        print(f"DEBUG - LOOP {mnemonic} to {target_lower} (lowercase): from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
-                    elif target_upper in self.labels:
-                        target_address = self.labels[target_upper]
-                        offset = target_address - (self.current_address + 2)
-                        if not -128 <= offset <= 127:
-                            raise ValueError(f"Loop target out of range for short jump: {offset}")
-                        machine_code.append(offset & 0xFF)
-                        print(f"DEBUG - LOOP {mnemonic} to {target_upper} (uppercase): from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
-                    else:
-                        print(f"DEBUG - Label {target} not found. Available labels: {list(self.labels.keys())}")
-                        raise ValueError(f"Unknown label: {target}")
+                    print(f"Label {target} not found. Available labels: {list(self.labels.keys())}")
+                    raise ValueError(f"Unknown label: {target}")
                 
             # For jumps (J*)
             elif mnemonic in self.opcodes and 'rel8' in self.opcodes[mnemonic]:
                 opcode = self.opcodes[mnemonic]['rel8']
                 machine_code.append(opcode)
                 
-                # Calculate relative offset
+                # Calculate relative offset for jumps
+                target_address = None
+                
+                # Check for the label in different case formats
                 if target in self.labels:
                     target_address = self.labels[target]
+                elif target.lower() in self.labels:
+                    target_address = self.labels[target.lower()]
+                elif target.upper() in self.labels:
+                    target_address = self.labels[target.upper()]
+                
+                if target_address is not None:
                     # The jump offset is relative to the next instruction
                     # which is 2 bytes after the current address (opcode + offset)
                     offset = target_address - (self.current_address + 2)
                     if not -128 <= offset <= 127:
                         raise ValueError(f"Jump target out of range for short jump: {offset}")
+                    
                     machine_code.append(offset & 0xFF)
-                    print(f"DEBUG - JUMP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
+                    
+                    # Print debug info
+                    print(f"JUMP {mnemonic} to {target}: from {self.current_address + 2:04X} to {target_address:04X}, offset {offset}")
                 else:
+                    print(f"Label {target} not found. Available labels: {list(self.labels.keys())}")
                     raise ValueError(f"Unknown label: {target}")
         
         elif mnemonic == 'CALL':
@@ -1068,15 +1078,28 @@ class Assembler:
             # CALL instruction
             machine_code.append(0xE8)  # CALL rel16
             
-            # Calculate relative offset
+            # Calculate relative offset for CALL
+            target_address = None
+            
+            # Check for the label in different case formats
             if target in self.labels:
                 target_address = self.labels[target]
+            elif target.lower() in self.labels:
+                target_address = self.labels[target.lower()]
+            elif target.upper() in self.labels:
+                target_address = self.labels[target.upper()]
+            
+            if target_address is not None:
                 # The call offset is relative to the next instruction
                 # which is 3 bytes after the current address (opcode + offset)
                 offset = target_address - (self.current_address + 3)
                 machine_code.append(offset & 0xFF)
                 machine_code.append((offset >> 8) & 0xFF)
+                
+                # Print debug info
+                print(f"CALL to {target}: from {self.current_address + 3:04X} to {target_address:04X}, offset {offset}")
             else:
+                print(f"Label {target} not found. Available labels: {list(self.labels.keys())}")
                 raise ValueError(f"Unknown label: {target}")
         
         elif mnemonic == 'DEC':
